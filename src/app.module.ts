@@ -9,6 +9,7 @@ import { ResponseInterceptor } from './common/interceptors/response.interceptor.
 import { createValidationPipe } from './common/pipes/validation.pipe.js';
 import { validate, type EnvironmentVariables } from './config/env.validation.js';
 import { loggerParams } from './config/logger.config.js';
+import { HealthModule } from './modules/health/health.module.js';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { loggerParams } from './config/logger.config.js';
       useFactory: (config: ConfigService<EnvironmentVariables, true>) =>
         loggerParams(config.get('NODE_ENV', { infer: true })),
     }),
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [

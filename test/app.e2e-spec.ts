@@ -128,6 +128,17 @@ describe('Response envelope (e2e)', () => {
     expect(JSON.stringify(res.body)).not.toContain('hunter2');
   });
 
+  it('GET /v1/health/live is 200 in the envelope', async () => {
+    const res = await request(app.getHttpServer()).get('/v1/health/live').expect(200);
+    expect(res.body).toMatchObject({ success: true, message: 'Service is live', data: { status: 'ok' } });
+  });
+
+  // Needs the dev dependencies running: native PostgreSQL, `make up` (redis, openbao)
+  it('GET /v1/health/ready reports database, redis and openbao up', async () => {
+    const res = await request(app.getHttpServer()).get('/v1/health/ready').expect(200);
+    expect(Object.keys(res.body.data.info).sort()).toEqual(['database', 'openbao', 'redis']);
+  });
+
   it('hides internals of unexpected errors behind a generic 500', async () => {
     const res = await request(app.getHttpServer()).get('/v1/envelope-test/crash').expect(500);
     expect(res.body.error).toEqual({

@@ -46,7 +46,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const requestId = getRequestId() ?? String(req.headers[REQUEST_ID_HEADER] ?? '');
 
     const parts = this.toParts(exception);
-    if (parts.statusCode >= 500) {
+    const expected = exception instanceof DomainException && exception.expose;
+    if (parts.statusCode >= 500 && !expected) {
       const err = exception instanceof Error ? exception : new Error(String(exception));
       this.logger.error(
         { requestId, method: req.method, path: req.originalUrl, err },
@@ -70,12 +71,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
   private toParts(exception: unknown): ErrorParts {
     if (exception instanceof DomainException) {
       const statusCode = exception.statusCode;
+      const hide = statusCode >= 500 && !exception.expose;
       return {
         statusCode,
         code: exception.code,
-        // 5xx never exposes internals, even from domain code
-        message: statusCode >= 500 ? INTERNAL_ERROR_MESSAGE : exception.message,
-        details: statusCode >= 500 ? undefined : exception.details,
+        message: hide ? INTERNAL_ERROR_MESSAGE : exception.message,
+        details: hide ? undefined : exception.details,
       };
     }
     if (exception instanceof HttpException) {

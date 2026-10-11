@@ -7,6 +7,8 @@ export class DomainException extends Error {
     message: string,
     readonly statusCode: number = HttpStatus.UNPROCESSABLE_ENTITY,
     readonly details?: ApiErrorDetail[],
+    // 5xx messages and details are hidden unless the thrower marks them safe for clients
+    readonly expose = false,
   ) {
     super(message);
     this.name = 'DomainException';
