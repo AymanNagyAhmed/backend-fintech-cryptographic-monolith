@@ -1,8 +1,23 @@
 import { NestFactory } from '@nestjs/core';
+import { ConfigService } from '@nestjs/config';
+import helmet from 'helmet';
 import { AppModule } from './app.module.js';
+import type { EnvironmentVariables } from './config/env.validation.js';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  await app.listen(process.env.PORT ?? 3000);
+  // rawBody: webhook and signed-request verification need the exact bytes that were sent
+  const app = await NestFactory.create(AppModule, { rawBody: true });
+  const config = app.get<ConfigService<EnvironmentVariables, true>>(ConfigService);
+
+  app.setGlobalPrefix('v1');
+  app.use(helmet());
+  app.enableCors({
+    origin: config.get('CORS_ORIGINS', { infer: true }).split(','),
+    credentials: true,
+    exposedHeaders: ['x-request-id'],
+  });
+  app.enableShutdownHooks();
+
+  await app.listen(config.get('PORT', { infer: true }));
 }
 await bootstrap();
