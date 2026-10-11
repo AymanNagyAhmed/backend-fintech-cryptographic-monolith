@@ -1,5 +1,7 @@
-import { Controller, Get, INestApplication, NotFoundException } from '@nestjs/common';
+import { Body, Controller, Get, INestApplication, NotFoundException, Post } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Type } from 'class-transformer';
+import { IsString, Matches, ValidateNested } from 'class-validator';
 import request from 'supertest';
 import { App } from 'supertest/types.js';
 import { AppModule } from './../src/app.module.js';
@@ -7,8 +9,27 @@ import { setupApp } from './../src/app.setup.js';
 import { ResponseMessage } from './../src/common/decorators/response-message.decorator.js';
 import { DomainException } from './../src/common/exceptions/domain.exception.js';
 
+class CounterpartyDto {
+  @IsString()
+  walletId: string;
+}
+
+class TransferDto {
+  @Matches(/^\d+(\.\d+)?$/)
+  amount: string;
+
+  @ValidateNested()
+  @Type(() => CounterpartyDto)
+  to: CounterpartyDto;
+}
+
 @Controller('envelope-test')
 class EnvelopeTestController {
+  @Post('transfer')
+  transfer(@Body() dto: TransferDto) {
+    return dto;
+  }
+
   @Get('message')
   @ResponseMessage('Transfer completed successfully')
   message() {
@@ -88,6 +109,23 @@ describe('Response envelope (e2e)', () => {
       message: 'Not enough balance.',
       details: [{ field: 'amount', issue: 'exceeds available balance' }],
     });
+  });
+
+  it('accepts a valid body', async () => {
+    const body = { amount: '10.50', to: { walletId: 'w1' } };
+    const res = await request(app.getHttpServer()).post('/v1/envelope-test/transfer').send(body).expect(201);
+    expect(res.body).toMatchObject({ success: true, statusCode: 201, data: body });
+  });
+
+  it('returns VALIDATION_FAILED with field details, including nested and unknown fields', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/v1/envelope-test/transfer')
+      .send({ amount: 10.5, to: {}, password: 'hunter2-should-not-echo' })
+      .expect(400);
+    expect(res.body).toMatchObject({ success: false, statusCode: 400, error: { code: 'VALIDATION_FAILED' } });
+    const fields = res.body.error.details.map((d: { field: string }) => d.field);
+    expect(fields).toEqual(expect.arrayContaining(['amount', 'to.walletId', 'password']));
+    expect(JSON.stringify(res.body)).not.toContain('hunter2');
   });
 
   it('hides internals of unexpected errors behind a generic 500', async () => {
