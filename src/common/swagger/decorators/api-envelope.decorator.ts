@@ -7,9 +7,9 @@ import {
 } from '@nestjs/swagger';
 import { ApiFailureDto, ApiSuccessDto } from '../dto/api-envelope.dto.js';
 
-/** Documents a success response as the envelope with the given `data` schema. */
+/** Documents a success response as the envelope with the given `data` schema or DTO `$ref`. */
 export function ApiOkEnvelope(
-  data: SchemaObject,
+  data: SchemaObject | { $ref: string },
   status = 200,
   description?: string,
 ) {

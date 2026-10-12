@@ -13,6 +13,7 @@ import {
   type HealthIndicatorFunction,
 } from '@nestjs/terminus';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Public } from '../../common/decorators/public.decorator.js';
 import { ResponseMessage } from '../../common/decorators/response-message.decorator.js';
 import { DomainException } from '../../common/exceptions/domain.exception.js';
 import {
@@ -39,6 +40,7 @@ const HEALTH_RESULT = {
 };
 
 @ApiTags('health')
+@Public()
 @Controller('health')
 export class HealthController {
   constructor(

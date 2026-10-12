@@ -13,6 +13,7 @@ import {
 } from './config/env.validation.js';
 import { loggerParams } from './config/logger.config.js';
 import { DatabaseModule } from './database/database.module.js';
+import { AuthModule } from './modules/auth/auth.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 
@@ -27,6 +28,7 @@ import { UsersModule } from './modules/users/users.module.js';
     DatabaseModule,
     HealthModule,
     UsersModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [
