@@ -3,8 +3,11 @@ import { ESLint } from 'eslint';
 const eslint = new ESLint({ cwd: process.cwd() });
 
 async function errorsIn(code: string): Promise<number> {
-  const [result] = await eslint.lintText(code, { filePath: 'src/lint-fixture.ts' });
-  return result.messages.filter((m) => m.ruleId === 'no-restricted-syntax').length;
+  const [result] = await eslint.lintText(code, {
+    filePath: 'src/lint-fixture.ts',
+  });
+  return result.messages.filter((m) => m.ruleId === 'no-restricted-syntax')
+    .length;
 }
 
 describe('lint rule: no float conversion of money (2.11)', () => {

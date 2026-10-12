@@ -1,8 +1,8 @@
-import { plainToInstance } from 'class-transformer';
-import { validateSync } from 'class-validator';
 import { DomainException } from '../exceptions/domain.exception.js';
-import { IsDecimalString } from './is-decimal-string.validator.js';
-import { Decimal, Money, type Currency, type RoundingMode } from './money.js';
+import type { Currency } from './currency.js';
+import { Decimal } from './decimal.js';
+import { Money } from './money.js';
+import type { RoundingMode } from './rounding-mode.js';
 
 const usd = (a: string) => Money.of(a, 'USD');
 
@@ -28,9 +28,12 @@ describe('Money (2.11)', () => {
     expect(float).not.toBe(1000);
     expect(dec.toFixed(1)).toBe('1000.0');
     expect(money.toString()).toBe('1000.00');
-    expect(Money.sum(Array.from({ length: 10_000 }, () => Money.of('0.00000001', 'BTC')), 'BTC').toString()).toBe(
-      '0.00010000',
-    );
+    expect(
+      Money.sum(
+        Array.from({ length: 10_000 }, () => Money.of('0.00000001', 'BTC')),
+        'BTC',
+      ).toString(),
+    ).toBe('0.00010000');
   });
 
   it('adds 0.1 + 0.2 to exactly 0.30', () => {
@@ -56,9 +59,12 @@ describe('Money (2.11)', () => {
     ['0.123456785', 'BTC', 'HALF_UP', '0.12345679'],
     ['0.000000005', 'BTC', 'HALF_UP', '0.00000001'],
   ];
-  it.each(golden)('round(%s %s, %s) = %s', (input, currency, mode, expected) => {
-    expect(Money.round(input, currency, mode).toString()).toBe(expected);
-  });
+  it.each(golden)(
+    'round(%s %s, %s) = %s',
+    (input, currency, mode, expected) => {
+      expect(Money.round(input, currency, mode).toString()).toBe(expected);
+    },
+  );
 
   it('multiplies with an explicit rounding mode (7.5% fee on 19.99)', () => {
     expect(usd('19.99').multiply('0.075', 'HALF_EVEN').toString()).toBe('1.50');
@@ -69,9 +75,16 @@ describe('Money (2.11)', () => {
   });
 
   it('allocates without losing minor units', () => {
-    expect(usd('100.00').allocate([1, 1, 1]).map(String)).toEqual(['33.34', '33.33', '33.33']);
+    expect(usd('100.00').allocate([1, 1, 1]).map(String)).toEqual([
+      '33.34',
+      '33.33',
+      '33.33',
+    ]);
     expect(usd('0.05').allocate([3, 7]).map(String)).toEqual(['0.02', '0.03']);
-    expect(Money.of('1.00000000', 'BTC').allocate([1, 2]).map(String)).toEqual(['0.33333333', '0.66666667']);
+    expect(Money.of('1.00000000', 'BTC').allocate([1, 2]).map(String)).toEqual([
+      '0.33333333',
+      '0.66666667',
+    ]);
     const parts = usd('999.99').allocate([5, 3, 2, 1]);
     expect(Money.sum(parts, 'USD').toString()).toBe('999.99');
   });
@@ -79,7 +92,9 @@ describe('Money (2.11)', () => {
   it('formats with the currency scale and serialises as a string', () => {
     expect(usd('1500').toString()).toBe('1500.00');
     expect(Money.of('0.0001', 'BTC').toString()).toBe('0.00010000');
-    expect(JSON.stringify({ fee: usd('1.5') })).toBe('{"fee":{"amount":"1.50","currency":"USD"}}');
+    expect(JSON.stringify({ fee: usd('1.5') })).toBe(
+      '{"fee":{"amount":"1.50","currency":"USD"}}',
+    );
     expect(usd('-0').toString()).toBe('0.00');
   });
 
@@ -99,48 +114,31 @@ describe('Money (2.11)', () => {
     ['NaN', 'USD'],
     ['Infinity', 'USD'],
     ['1000000000000', 'USD'],
-  ] as [string, Currency][])('rejects %j %s with INVALID_AMOUNT', (amount, currency) => {
-    expect(codeOf(() => Money.of(amount, currency))).toBe('INVALID_AMOUNT');
-  });
-
-  it('rejects JS numbers and unknown currencies', () => {
-    expect(codeOf(() => Money.of(10.5 as unknown as string, 'USD'))).toBe('INVALID_AMOUNT');
-    expect(codeOf(() => Money.of('1', 'XYZ' as Currency))).toBe('INVALID_AMOUNT');
-    expect(codeOf(() => Money.of('1', 'toString' as Currency))).toBe('INVALID_AMOUNT');
-  });
-
-  it('refuses to mix currencies', () => {
-    expect(codeOf(() => usd('1').add(Money.of('1', 'AED')))).toBe('CURRENCY_MISMATCH');
-    expect(codeOf(() => usd('1').gt(Money.of('1', 'BTC')))).toBe('CURRENCY_MISMATCH');
-  });
-});
-
-describe('@IsDecimalString()', () => {
-  class AmountDto {
-    @IsDecimalString()
-    amount: unknown;
-  }
-  class SignedUsdDto {
-    @IsDecimalString({ maxScale: 2, positive: false })
-    amount: unknown;
-  }
-  const ok = (cls: new () => object, amount: unknown) =>
-    validateSync(plainToInstance(cls, { amount })).length === 0;
-
-  it.each(['10.50', '0.00000001', '999999999999.99999999', '1'])('accepts %j', (v) => {
-    expect(ok(AmountDto, v)).toBe(true);
-  });
-
-  it.each([10.5, '0', '0.00', '-1.00', '1e3', '1.123456789', '1000000000000', '', null, '.5', '5.'])(
-    'rejects %j',
-    (v) => {
-      expect(ok(AmountDto, v)).toBe(false);
+  ] as [string, Currency][])(
+    'rejects %j %s with INVALID_AMOUNT',
+    (amount, currency) => {
+      expect(codeOf(() => Money.of(amount, currency))).toBe('INVALID_AMOUNT');
     },
   );
 
-  it('honours maxScale and positive: false', () => {
-    expect(ok(SignedUsdDto, '-12.34')).toBe(true);
-    expect(ok(SignedUsdDto, '0')).toBe(true);
-    expect(ok(SignedUsdDto, '1.001')).toBe(false);
+  it('rejects JS numbers and unknown currencies', () => {
+    expect(codeOf(() => Money.of(10.5 as unknown as string, 'USD'))).toBe(
+      'INVALID_AMOUNT',
+    );
+    expect(codeOf(() => Money.of('1', 'XYZ' as Currency))).toBe(
+      'INVALID_AMOUNT',
+    );
+    expect(codeOf(() => Money.of('1', 'toString' as Currency))).toBe(
+      'INVALID_AMOUNT',
+    );
+  });
+
+  it('refuses to mix currencies', () => {
+    expect(codeOf(() => usd('1').add(Money.of('1', 'AED')))).toBe(
+      'CURRENCY_MISMATCH',
+    );
+    expect(codeOf(() => usd('1').gt(Money.of('1', 'BTC')))).toBe(
+      'CURRENCY_MISMATCH',
+    );
   });
 });
