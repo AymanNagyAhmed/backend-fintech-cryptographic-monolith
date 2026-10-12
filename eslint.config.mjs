@@ -24,7 +24,7 @@ const restricted = [
 export default defineConfig(
   { ignores: ['dist/', 'coverage/', 'node_modules/', 'src/generated/'] },
   {
-    files: ['src/**/*.ts', 'test/**/*.ts'],
+    files: ['src/**/*.ts', 'test/**/*.ts', 'scripts/**/*.ts'],
     languageOptions: { parser: tseslint.parser },
     linterOptions: { reportUnusedDisableDirectives: 'error' },
     rules: {
