@@ -1,0 +1,33 @@
+enum UserRole {
+  user
+  approver
+  compliance
+  admin
+
+  @@map("user_role")
+  @@schema("auth")
+}
+
+enum UserStatus {
+  active
+  locked
+  disabled
+
+  @@map("user_status")
+  @@schema("auth")
+}
+
+// email is stored lowercased (CHECK in the migration), so the unique index is case-insensitive.
+// passwordHash is an argon2id PHC string ($argon2id$v=19$m=...,t=...,p=...$salt$hash).
+model User {
+  id           String     @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  email        String     @unique @db.VarChar(254)
+  passwordHash String     @map("password_hash")
+  status       UserStatus @default(active)
+  roles        UserRole[] @default([user])
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("users")
+  @@schema("auth")
+}
