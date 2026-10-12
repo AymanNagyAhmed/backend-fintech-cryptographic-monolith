@@ -1,12 +1,4 @@
-import { applyDecorators } from '@nestjs/common';
-import {
-  ApiExtraModels,
-  ApiProperty,
-  ApiPropertyOptional,
-  ApiResponse,
-  getSchemaPath,
-  type SchemaObject,
-} from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ApiMetaDto {
   @ApiProperty({ example: 'req_6ce0eecd9fd7a31fdae9f47b' })
@@ -22,7 +14,10 @@ export class ApiErrorDetailDto {
 }
 
 export class ApiErrorDto {
-  @ApiProperty({ example: 'VALIDATION_FAILED', description: 'Stable UPPER_SNAKE_CASE code; clients branch on it' })
+  @ApiProperty({
+    example: 'VALIDATION_FAILED',
+    description: 'Stable UPPER_SNAKE_CASE code; clients branch on it',
+  })
   code: string;
 
   @ApiProperty({ example: 'The request contains invalid fields.' })
@@ -60,20 +55,10 @@ export class ApiSuccessDto {
   meta: ApiMetaDto;
 }
 
-export const ENVELOPE_MODELS = [ApiSuccessDto, ApiFailureDto, ApiErrorDto, ApiErrorDetailDto, ApiMetaDto];
-
-/** Documents a success response as the envelope with the given `data` schema. */
-export function ApiOkEnvelope(data: SchemaObject, status = 200, description?: string) {
-  return applyDecorators(
-    ApiExtraModels(ApiSuccessDto),
-    ApiResponse({
-      status,
-      description,
-      schema: { allOf: [{ $ref: getSchemaPath(ApiSuccessDto) }, { properties: { data } }] },
-    }),
-  );
-}
-
-export function ApiFailureResponse(status: number, description: string) {
-  return applyDecorators(ApiExtraModels(ApiFailureDto), ApiResponse({ status, description, type: ApiFailureDto }));
-}
+export const ENVELOPE_MODELS = [
+  ApiSuccessDto,
+  ApiFailureDto,
+  ApiErrorDto,
+  ApiErrorDetailDto,
+  ApiMetaDto,
+];

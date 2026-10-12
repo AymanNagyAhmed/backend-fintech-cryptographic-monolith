@@ -1,6 +1,6 @@
 import type { INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { ENVELOPE_MODELS } from '../common/swagger/api-envelope.js';
+import { ENVELOPE_MODELS } from '../common/swagger/dto/api-envelope.dto.js';
 
 export const SWAGGER_PATH = 'v1/docs';
 

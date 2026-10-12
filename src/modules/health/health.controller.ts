@@ -9,7 +9,7 @@ import {
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ResponseMessage } from '../../common/decorators/response-message.decorator.js';
 import { DomainException } from '../../common/exceptions/domain.exception.js';
-import { ApiFailureResponse, ApiOkEnvelope } from '../../common/swagger/api-envelope.js';
+import { ApiFailureResponse, ApiOkEnvelope } from '../../common/swagger/decorators/api-envelope.decorator.js';
 import { HEAP_LIMIT_BYTES } from './health.constants.js';
 import { OpenBaoHealthIndicator } from './indicators/openbao.health.js';
 import { PostgresHealthIndicator } from './indicators/postgres.health.js';

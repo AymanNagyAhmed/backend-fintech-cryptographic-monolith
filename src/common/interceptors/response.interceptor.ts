@@ -8,7 +8,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import type { Request, Response } from 'express';
 import { map, type Observable } from 'rxjs';
-import type { ApiSuccess } from '../api-response.js';
+import type { ApiSuccess } from '../interfaces/api-response.interface.js';
 import { DEFAULT_RESPONSE_MESSAGE, RESPONSE_MESSAGE_KEY } from '../decorators/response-message.decorator.js';
 import { REQUEST_ID_HEADER } from '../middleware/request-id.middleware.js';
 import { getRequestId } from '../request-context.js';

@@ -1,5 +1,5 @@
 import { HttpStatus, ValidationPipe, type ValidationError } from '@nestjs/common';
-import type { ApiErrorDetail } from '../api-response.js';
+import type { ApiErrorDetail } from '../interfaces/api-response.interface.js';
 import { DomainException } from '../exceptions/domain.exception.js';
 
 export function flattenValidationErrors(errors: ValidationError[], parent = ''): ApiErrorDetail[] {

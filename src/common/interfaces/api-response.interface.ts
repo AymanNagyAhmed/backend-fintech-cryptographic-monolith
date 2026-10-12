@@ -29,5 +29,3 @@ export interface ApiFailure {
 }
 
 export type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
-
-export const INTERNAL_ERROR_MESSAGE = 'An unexpected error occurred. Our team has been notified.';

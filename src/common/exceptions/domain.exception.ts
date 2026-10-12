@@ -1,5 +1,5 @@
 import { HttpStatus } from '@nestjs/common';
-import type { ApiErrorDetail } from '../api-response.js';
+import type { ApiErrorDetail } from '../interfaces/api-response.interface.js';
 
 export class DomainException extends Error {
   constructor(

@@ -7,10 +7,16 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { INTERNAL_ERROR_MESSAGE, type ApiErrorDetail, type ApiFailure } from '../api-response.js';
+import type {
+  ApiErrorDetail,
+  ApiFailure,
+} from '../interfaces/api-response.interface.js';
 import { DomainException } from '../exceptions/domain.exception.js';
 import { REQUEST_ID_HEADER } from '../middleware/request-id.middleware.js';
 import { getRequestId } from '../request-context.js';
+
+const INTERNAL_ERROR_MESSAGE =
+  'An unexpected error occurred. Our team has been notified.';
 
 interface ErrorParts {
   statusCode: number;
@@ -43,12 +49,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const http = host.switchToHttp();
     const req = http.getRequest<Request>();
     const res = http.getResponse<Response>();
-    const requestId = getRequestId() ?? String(req.headers[REQUEST_ID_HEADER] ?? '');
+    const requestId =
+      getRequestId() ?? String(req.headers[REQUEST_ID_HEADER] ?? '');
 
     const parts = this.toParts(exception);
     const expected = exception instanceof DomainException && exception.expose;
     if (parts.statusCode >= 500 && !expected) {
-      const err = exception instanceof Error ? exception : new Error(String(exception));
+      const err =
+        exception instanceof Error ? exception : new Error(String(exception));
       this.logger.error(
         { requestId, method: req.method, path: req.originalUrl, err },
         `${req.method} ${req.originalUrl} failed: ${err.message}`,
@@ -84,7 +92,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
       return {
         statusCode,
         code: codeForStatus(statusCode),
-        message: statusCode >= 500 ? INTERNAL_ERROR_MESSAGE : httpExceptionMessage(exception),
+        message:
+          statusCode >= 500
+            ? INTERNAL_ERROR_MESSAGE
+            : httpExceptionMessage(exception),
       };
     }
     return {
