@@ -6,6 +6,7 @@ import request from 'supertest';
 import { App } from 'supertest/types.js';
 import { AppModule } from './../src/app.module.js';
 import { setupApp } from './../src/app.setup.js';
+import { Public } from './../src/common/decorators/public.decorator.js';
 import { ResponseMessage } from './../src/common/decorators/response-message.decorator.js';
 import { DomainException } from './../src/common/exceptions/domain.exception.js';
 
@@ -23,6 +24,7 @@ class TransferDto {
   to: CounterpartyDto;
 }
 
+@Public()
 @Controller('envelope-test')
 class EnvelopeTestController {
   @Post('transfer')
