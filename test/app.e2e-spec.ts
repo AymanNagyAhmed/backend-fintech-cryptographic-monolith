@@ -133,7 +133,7 @@ describe('Response envelope (e2e)', () => {
     expect(res.body).toMatchObject({ success: true, message: 'Service is live', data: { status: 'ok' } });
   });
 
-  // Needs the dev dependencies running: native PostgreSQL, `make up` (redis, openbao)
+  // Needs the dev dependencies running: `make up` (postgres, redis, openbao)
   it('GET /v1/health/ready reports database, redis and openbao up', async () => {
     const res = await request(app.getHttpServer()).get('/v1/health/ready').expect(200);
     expect(Object.keys(res.body.data.info).sort()).toEqual(['database', 'openbao', 'redis']);
