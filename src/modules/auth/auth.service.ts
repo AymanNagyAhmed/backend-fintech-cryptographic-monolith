@@ -1,43 +1,45 @@
-import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { DomainException } from '../../common/exceptions/domain.exception.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { UserStatus } from '../../generated/prisma/client.js';
 import { UsersService, type UserView } from '../users/users.service.js';
 import type { Role } from './auth.types.js';
-import type { LoginDto, RegisterDto } from './dto/auth.dto.js';
-import type { TokenPairDto, UserProfileDto } from './dto/auth-response.dto.js';
+import type { LoginDto } from './dto/login.dto.js';
+import type { RegisterDto } from './dto/register.dto.js';
+import type { TokenPairDto } from './dto/token-pair.dto.js';
+import type { UserProfileDto } from './dto/user-profile.dto.js';
+import {
+  accountInactive,
+  invalidCredentials,
+  invalidRefreshToken,
+  invalidTotp,
+  refreshTokenReused,
+  totpRequired,
+  userGone,
+} from './exceptions/auth.exceptions.js';
 import { TokenService } from './token.service.js';
+import { TotpService } from './totp/totp.service.js';
 
 type RefreshOutcome =
-  | { kind: 'rotated'; userId: string; familyId: string; refreshToken: string }
+  | {
+      kind: 'rotated';
+      userId: string;
+      familyId: string;
+      mfa: boolean;
+      refreshToken: string;
+    }
   | { kind: 'reused' }
   | { kind: 'invalid' };
 
-const invalidCredentials = () =>
-  new DomainException(
-    'INVALID_CREDENTIALS',
-    'Email or password is incorrect.',
-    HttpStatus.UNAUTHORIZED,
-  );
-const invalidRefreshToken = () =>
-  new DomainException(
-    'INVALID_REFRESH_TOKEN',
-    'Refresh token is invalid, expired or revoked.',
-    HttpStatus.UNAUTHORIZED,
-  );
-const accountInactive = () =>
-  new DomainException(
-    'ACCOUNT_INACTIVE',
-    'This account is locked or disabled.',
-    HttpStatus.FORBIDDEN,
-  );
-
-export const toProfile = (user: UserView): UserProfileDto => ({
+export const toProfile = (
+  user: UserView,
+  totpEnabled: boolean,
+): UserProfileDto => ({
   id: user.id,
   email: user.email,
   roles: user.roles,
   status: user.status,
+  totpEnabled,
   createdAt: user.createdAt.toISOString(),
 });
 
@@ -49,20 +51,32 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly users: UsersService,
     private readonly tokens: TokenService,
+    private readonly totp: TotpService,
   ) {}
 
   /** Self-registration always creates a plain `user`; other roles are granted by an admin. */
   async register(dto: RegisterDto): Promise<UserProfileDto> {
-    return toProfile(
-      await this.users.create({ email: dto.email, password: dto.password }),
-    );
+    const user = await this.users.create({
+      email: dto.email,
+      password: dto.password,
+    });
+    return toProfile(user, false);
   }
 
+  /**
+   * Password, then TOTP when enabled. A session without TOTP gets tokens with `mfa: false`,
+   * in which privileged roles are not applied (RolesGuard), so such a user can still enroll.
+   */
   async login(dto: LoginDto): Promise<TokenPairDto> {
     const user = await this.users.verifyCredentials(dto.email, dto.password);
     if (!user) throw invalidCredentials();
-    // Only after the password matched, so this is not an account-existence oracle
+    // Only after the password matched, so these are not account-existence oracles
     if (user.status !== UserStatus.active) throw accountInactive();
+    const mfa = await this.totp.isEnabled(user.id);
+    if (mfa) {
+      if (!dto.totpCode) throw totpRequired();
+      if (!(await this.totp.verify(user.id, dto.totpCode))) throw invalidTotp();
+    }
 
     const familyId = randomUUID();
     const { token, hash } = this.tokens.newRefreshToken();
@@ -71,10 +85,11 @@ export class AuthService {
         userId: user.id,
         familyId,
         tokenHash: hash,
+        mfa,
         expiresAt: this.tokens.refreshExpiry(),
       },
     });
-    return this.pair(user.id, user.roles, familyId, token);
+    return this.pair(user.id, user.roles, familyId, mfa, token);
   }
 
   /**
@@ -113,6 +128,7 @@ export class AuthService {
           userId: row.userId,
           familyId: row.familyId,
           tokenHash: next.hash,
+          mfa: row.mfa,
           expiresAt: this.tokens.refreshExpiry(now),
         },
       });
@@ -120,17 +136,14 @@ export class AuthService {
         kind: 'rotated',
         userId: row.userId,
         familyId: row.familyId,
+        mfa: row.mfa,
         refreshToken: next.token,
       };
     });
 
     if (outcome.kind === 'reused') {
       this.logger.warn('Refresh token reuse detected; session family revoked');
-      throw new DomainException(
-        'REFRESH_TOKEN_REUSED',
-        'Refresh token was already used; the session has been revoked.',
-        HttpStatus.UNAUTHORIZED,
-      );
+      throw refreshTokenReused();
     }
     if (outcome.kind === 'invalid') throw invalidRefreshToken();
 
@@ -144,6 +157,7 @@ export class AuthService {
       user.id,
       user.roles,
       outcome.familyId,
+      outcome.mfa,
       outcome.refreshToken,
     );
   }
@@ -158,13 +172,14 @@ export class AuthService {
 
   async me(userId: string): Promise<UserProfileDto> {
     const user = await this.users.findById(userId);
-    if (!user)
-      throw new DomainException(
-        'UNAUTHORIZED',
-        'User no longer exists.',
-        HttpStatus.UNAUTHORIZED,
-      );
-    return toProfile(user);
+    if (!user) throw userGone();
+    return toProfile(user, await this.totp.isEnabled(user.id));
+  }
+
+  async setupTotp(userId: string) {
+    const user = await this.users.findById(userId);
+    if (!user) throw userGone();
+    return this.totp.setup(user.id, user.email);
   }
 
   private async revokeFamily(familyId: string): Promise<void> {
@@ -178,13 +193,20 @@ export class AuthService {
     userId: string,
     roles: Role[],
     familyId: string,
+    mfa: boolean,
     refreshToken: string,
   ): Promise<TokenPairDto> {
     return {
-      accessToken: await this.tokens.signAccessToken(userId, roles, familyId),
+      accessToken: await this.tokens.signAccessToken(
+        userId,
+        roles,
+        familyId,
+        mfa,
+      ),
       refreshToken,
       tokenType: 'Bearer',
       expiresIn: this.tokens.accessTtlSeconds,
+      mfa,
     };
   }
 }

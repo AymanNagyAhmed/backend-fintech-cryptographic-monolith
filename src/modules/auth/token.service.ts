@@ -19,6 +19,7 @@ const isClaims = (
 ): c is Record<string, unknown> & AccessTokenClaims =>
   typeof c.sub === 'string' &&
   typeof c.sid === 'string' &&
+  typeof c.mfa === 'boolean' &&
   Array.isArray(c.roles) &&
   c.roles.every((r) => ROLES.includes(r as Role));
 
@@ -42,9 +43,14 @@ export class TokenService {
   }
 
   /** HS256 with JWT_ACCESS_SECRET; issuer, audience and algorithm are set in AuthModule. */
-  signAccessToken(userId: string, roles: Role[], sessionId: string) {
+  signAccessToken(
+    userId: string,
+    roles: Role[],
+    sessionId: string,
+    mfa: boolean,
+  ) {
     return this.jwt.signAsync(
-      { roles, sid: sessionId },
+      { roles, sid: sessionId, mfa },
       { subject: userId, expiresIn: this.accessTtlSeconds },
     );
   }
@@ -58,7 +64,12 @@ export class TokenService {
     }
     if (!isClaims(claims))
       throw new UnauthorizedException('Invalid or expired access token');
-    return { id: claims.sub, roles: claims.roles, sessionId: claims.sid };
+    return {
+      id: claims.sub,
+      roles: claims.roles,
+      sessionId: claims.sid,
+      mfa: claims.mfa,
+    };
   }
 
   /** 256-bit opaque token for the client, and the only value stored in auth.refresh_tokens. */

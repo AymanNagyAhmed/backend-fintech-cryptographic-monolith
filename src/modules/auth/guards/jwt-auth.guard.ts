@@ -5,9 +5,9 @@ import {
   type ExecutionContext,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator.js';
-import type { AuthenticatedRequest } from './auth.types.js';
-import { TokenService } from './token.service.js';
+import { IS_PUBLIC_KEY } from '../../../common/decorators/public.decorator.js';
+import type { AuthenticatedRequest } from '../auth.types.js';
+import { TokenService } from '../token.service.js';
 
 /** Global guard: every HTTP route needs `Authorization: Bearer <access token>` unless @Public(). */
 @Injectable()

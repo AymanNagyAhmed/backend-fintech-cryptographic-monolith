@@ -46,7 +46,12 @@ describe('TokenService', () => {
   });
 
   it('signs an HS256 access token with sub, roles, sid, iss, aud and a 15 minute exp', async () => {
-    const token = await tokens.signAccessToken('u1', ['user', 'admin'], 's1');
+    const token = await tokens.signAccessToken(
+      'u1',
+      ['user', 'admin'],
+      's1',
+      true,
+    );
     const [header, payload] = token
       .split('.')
       .slice(0, 2)
@@ -56,6 +61,7 @@ describe('TokenService', () => {
       sub: 'u1',
       roles: ['user', 'admin'],
       sid: 's1',
+      mfa: true,
       iss: JWT_ISSUER,
       aud: JWT_AUDIENCE,
     });
@@ -64,6 +70,7 @@ describe('TokenService', () => {
       id: 'u1',
       roles: ['user', 'admin'],
       sessionId: 's1',
+      mfa: true,
     });
   });
 
@@ -71,7 +78,7 @@ describe('TokenService', () => {
     const forged = await new TokenService(
       jwtFor('x'.repeat(32)),
       config,
-    ).signAccessToken('u1', ['admin'], 's1');
+    ).signAccessToken('u1', ['admin'], 's1', false);
     await expect(verify(forged)).rejects.toThrow(UnauthorizedException);
   });
 
@@ -79,7 +86,7 @@ describe('TokenService', () => {
     const other = await new TokenService(
       jwtFor(ACCESS_SECRET, 'other-api'),
       config,
-    ).signAccessToken('u1', ['user'], 's1');
+    ).signAccessToken('u1', ['user'], 's1', false);
     await expect(verify(other)).rejects.toThrow(UnauthorizedException);
   });
 
@@ -89,6 +96,7 @@ describe('TokenService', () => {
       sub: 'u1',
       roles: ['admin'],
       sid: 's1',
+      mfa: true,
       iss: JWT_ISSUER,
       aud: JWT_AUDIENCE,
       iat: now,
@@ -98,18 +106,23 @@ describe('TokenService', () => {
   });
 
   it('rejects a changed payload', async () => {
-    const [h, , s] = (await tokens.signAccessToken('u1', ['user'], 's1')).split(
-      '.',
-    );
+    const [h, , s] = (
+      await tokens.signAccessToken('u1', ['user'], 's1', false)
+    ).split('.');
     const now = Math.floor(Date.now() / 1000);
-    const tampered = `${h}.${b64url({ sub: 'u1', roles: ['admin'], sid: 's1', iss: JWT_ISSUER, aud: JWT_AUDIENCE, iat: now, exp: now + 900 })}.${s}`;
+    const tampered = `${h}.${b64url({ sub: 'u1', roles: ['admin'], sid: 's1', mfa: true, iss: JWT_ISSUER, aud: JWT_AUDIENCE, iat: now, exp: now + 900 })}.${s}`;
     await expect(verify(tampered)).rejects.toThrow(UnauthorizedException);
   });
 
   it('rejects an expired token', async () => {
     const jwt = jwtFor(ACCESS_SECRET);
     const expired = await jwt.signAsync(
-      { roles: ['user'], sid: 's1', iat: Math.floor(Date.now() / 1000) - 120 },
+      {
+        roles: ['user'],
+        sid: 's1',
+        mfa: false,
+        iat: Math.floor(Date.now() / 1000) - 120,
+      },
       { subject: 'u1', expiresIn: 60 },
     );
     await expect(verify(expired)).rejects.toThrow(UnauthorizedException);
@@ -118,7 +131,7 @@ describe('TokenService', () => {
   it('rejects a valid signature with unexpected claims', async () => {
     const jwt = jwtFor(ACCESS_SECRET);
     const odd = await jwt.signAsync(
-      { roles: ['superuser'], sid: 's1' },
+      { roles: ['superuser'], sid: 's1', mfa: false },
       { subject: 'u1' },
     );
     await expect(verify(odd)).rejects.toThrow(UnauthorizedException);

@@ -7,9 +7,10 @@ import { UsersModule } from '../users/users.module.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 import { JWT_AUDIENCE, JWT_ISSUER } from './auth.types.js';
-import { JwtAuthGuard } from './jwt-auth.guard.js';
-import { RolesGuard } from './roles.guard.js';
+import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
+import { RolesGuard } from './guards/roles.guard.js';
 import { TokenService } from './token.service.js';
+import { TotpService } from './totp/totp.service.js';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { TokenService } from './token.service.js';
   providers: [
     AuthService,
     TokenService,
+    TotpService,
     // Order matters: authentication first, then roles
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },

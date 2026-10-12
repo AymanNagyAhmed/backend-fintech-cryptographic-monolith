@@ -55,6 +55,10 @@ export class EnvironmentVariables {
   @Matches(DURATION, { message: '$property must look like 15m, 7d, 3600s' })
   JWT_REFRESH_TTL: string;
 
+  // AES-256-GCM key for TOTP secrets at rest: 32 random bytes, base64 (openssl rand -base64 32)
+  @Matches(/^[A-Za-z0-9+/]{43}=$/, { message: '$property must be 32 bytes, base64 (openssl rand -base64 32)' })
+  TOTP_ENCRYPTION_KEY: string;
+
   @Matches(/^https?:\/\/[^,\s]+(,https?:\/\/[^,\s]+)*$/, {
     message: '$property must be a comma-separated list of http(s) origins',
   })
