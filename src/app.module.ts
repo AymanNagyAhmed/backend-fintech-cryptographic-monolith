@@ -14,6 +14,7 @@ import {
 import { loggerParams } from './config/logger.config.js';
 import { DatabaseModule } from './database/database.module.js';
 import { HealthModule } from './modules/health/health.module.js';
+import { UsersModule } from './modules/users/users.module.js';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { HealthModule } from './modules/health/health.module.js';
     }),
     DatabaseModule,
     HealthModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [
