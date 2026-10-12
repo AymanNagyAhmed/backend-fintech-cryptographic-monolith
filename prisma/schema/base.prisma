@@ -1,0 +1,14 @@
+// Multi-file schema: one file per bounded context, each model sets @@schema("<context>").
+// Conventions: UUID v7 ids (BIGSERIAL for seq), DateTime @db.Timestamptz(6),
+// Decimal @db.Decimal(20, 8), no @relation across schemas.
+
+generator client {
+  provider        = "prisma-client"
+  output          = "../../src/generated/prisma"
+  previewFeatures = ["typedSql"]
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["auth", "wallet", "ledger", "payments", "withdrawals", "audit", "crypto", "privacy", "compliance", "reserves"]
+}
