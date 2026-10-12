@@ -7,8 +7,12 @@ import { AppService } from './app.service.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor.js';
 import { createValidationPipe } from './common/pipes/validation.pipe.js';
-import { validate, type EnvironmentVariables } from './config/env.validation.js';
+import {
+  validate,
+  type EnvironmentVariables,
+} from './config/env.validation.js';
 import { loggerParams } from './config/logger.config.js';
+import { DatabaseModule } from './database/database.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 
 @Module({
@@ -19,6 +23,7 @@ import { HealthModule } from './modules/health/health.module.js';
       useFactory: (config: ConfigService<EnvironmentVariables, true>) =>
         loggerParams(config.get('NODE_ENV', { infer: true })),
     }),
+    DatabaseModule,
     HealthModule,
   ],
   controllers: [AppController],
