@@ -5,12 +5,21 @@ import type { Request } from 'express';
 export const ROLES = ['user', 'approver', 'compliance', 'admin'] as const;
 export type Role = (typeof ROLES)[number];
 
+/** Roles that only count in an access token whose login passed TOTP (RolesGuard). */
+export const PRIVILEGED_ROLES: readonly Role[] = [
+  'approver',
+  'compliance',
+  'admin',
+];
+
 /** The caller of a protected route, taken from the verified access token. */
 export interface AuthUser {
   id: string;
   roles: Role[];
   /** Refresh-token family of the login session that issued the access token. */
   sessionId: string;
+  /** The login of this session passed a TOTP code. */
+  mfa: boolean;
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -21,6 +30,7 @@ export interface AccessTokenClaims {
   sub: string;
   roles: Role[];
   sid: string;
+  mfa: boolean;
 }
 
 export const JWT_ISSUER = 'fintech-backend';
