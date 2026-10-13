@@ -1,0 +1,60 @@
+enum AccountKind {
+  wallet
+  system
+
+  @@map("account_kind")
+  @@schema("ledger")
+}
+
+enum AccountStatus {
+  active
+  frozen
+  closed
+
+  @@map("account_status")
+  @@schema("ledger")
+}
+
+// Double-entry account. balance is a cache of SUM(ledger_entries.amount), changed only by
+// LedgerService.post in the transaction that inserts the entries (after SELECT ... FOR UPDATE).
+// wallet accounts back one wallet.wallets row and can never go negative. system accounts
+// (clearing, fees, ...) have a unique code; only they may set allowNegative, because the
+// counter side of a deposit must go below zero when every posting sums to zero.
+// currency, kind, code and allowNegative are fixed once created (trigger).
+model Account {
+  id            String        @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  currency      String        @db.VarChar(10)
+  kind          AccountKind
+  code          String?       @unique @db.VarChar(64)
+  allowNegative Boolean       @default(false) @map("allow_negative")
+  balance       Decimal       @default(0) @db.Decimal(20, 8)
+  status        AccountStatus @default(active)
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  entries LedgerEntry[]
+
+  @@map("accounts")
+  @@schema("ledger")
+}
+
+// Immutable debit (negative) / credit (positive) rows; corrections are new reversing entries.
+// All entries with one ref form a posting: same currency, amounts sum to 0 (checked at commit).
+// currency repeats the account's currency (trigger) so a posting is checkable without a join.
+// seq orders an account's entries (statements, cursors); never order by created_at alone.
+model LedgerEntry {
+  id        String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  seq       BigInt   @unique @default(autoincrement())
+  accountId String   @map("account_id") @db.Uuid
+  amount    Decimal  @db.Decimal(20, 8)
+  currency  String   @db.VarChar(10)
+  ref       String   @db.VarChar(128)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@index([accountId, seq])
+  @@index([ref])
+  @@map("ledger_entries")
+  @@schema("ledger")
+}

@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { isCurrency, type Currency } from '../../common/money/currency.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { Prisma, type Wallet } from '../../generated/prisma/client.js';
-import { unsupportedCurrency } from './exceptions/wallets.exceptions.js';
+import { UnsupportedCurrencyException } from '../../common/money/exceptions/unsupported-currency.exception.js';
 
 export type WalletView = Omit<Wallet, 'currency'> & { currency: Currency };
 
@@ -28,7 +28,8 @@ export class WalletsService {
     input: CreateWalletInput,
     tx: Prisma.TransactionClient = this.prisma,
   ): Promise<WalletView> {
-    if (!isCurrency(input.currency)) throw unsupportedCurrency(input.currency);
+    if (!isCurrency(input.currency))
+      throw new UnsupportedCurrencyException(input.currency);
     return toView(
       await tx.wallet.create({
         data: {
