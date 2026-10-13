@@ -19,6 +19,7 @@ import { B2bModule } from './modules/b2b/b2b.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { WalletsModule } from './modules/wallets/wallets.module.js';
+import { LedgerModule } from './modules/ledger/ledger.module.js';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { WalletsModule } from './modules/wallets/wallets.module.js';
     AuthModule,
     B2bModule,
     WalletsModule,
+    LedgerModule,
   ],
   controllers: [AppController],
   providers: [
