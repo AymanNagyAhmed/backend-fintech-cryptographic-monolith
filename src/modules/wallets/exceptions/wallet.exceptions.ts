@@ -20,6 +20,14 @@ export const walletNotFound = () =>
     HttpStatus.NOT_FOUND,
   );
 
+export const walletLimitReached = (max: number) =>
+  new DomainException(
+    'WALLET_LIMIT_REACHED',
+    'The maximum number of wallets has been reached.',
+    HttpStatus.UNPROCESSABLE_ENTITY,
+    [{ field: 'currency', issue: `at most ${max} open wallets per user` }],
+  );
+
 export const walletClosed = () =>
   new DomainException(
     'WALLET_CLOSED',

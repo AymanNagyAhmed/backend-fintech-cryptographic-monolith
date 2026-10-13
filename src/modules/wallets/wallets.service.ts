@@ -1,13 +1,20 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { isCurrency, type Currency } from '../../common/money/currency.js';
+import type { EnvironmentVariables } from '../../config/env.validation.js';
 import { PrismaService } from '../../database/prisma.service.js';
-import { Prisma, type Wallet } from '../../generated/prisma/client.js';
+import {
+  Prisma,
+  WalletStatus,
+  type Wallet,
+} from '../../generated/prisma/client.js';
 import { UnsupportedCurrencyException } from '../../common/money/exceptions/unsupported-currency.exception.js';
 import { LedgerService } from '../ledger/ledger.service.js';
 import type { WalletPageDto } from './dto/wallet-page.dto.js';
 import type { WalletDto } from './dto/wallet.dto.js';
 import {
   walletClosed,
+  walletLimitReached,
   walletNotFound,
 } from './exceptions/wallet.exceptions.js';
 import { normalizeWalletLabel } from './wallet-label.js';
@@ -53,18 +60,34 @@ const toDto = (wallet: WalletView, balance: string): WalletDto => ({
 
 @Injectable()
 export class WalletsService {
+  private readonly maxPerUser: number;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly ledger: LedgerService,
-  ) {}
+    config: ConfigService<EnvironmentVariables, true>,
+  ) {
+    this.maxPerUser = config.get('WALLETS_MAX_PER_USER', { infer: true });
+  }
 
-  /** Opens the ledger account and the wallet in one transaction (POST /wallets). */
+  /**
+   * Opens the ledger account and the wallet in one transaction (POST /wallets). At most
+   * WALLETS_MAX_PER_USER wallets that are not closed: an advisory lock per owner, held until
+   * commit, makes concurrent opens of one owner count one after the other.
+   */
   async open(ownerUserId: string, input: OpenWalletInput): Promise<WalletDto> {
     if (!isCurrency(input.currency))
       throw new UnsupportedCurrencyException(input.currency);
     const label = normalizeOptionalLabel(input.label);
     const currency = input.currency;
     const wallet = await this.prisma.withTx(async (tx) => {
+      // $executeRaw: the lock returns `void`, which $queryRaw cannot deserialize
+      await tx.$executeRaw`
+        SELECT pg_advisory_xact_lock(hashtext('wallet.open'), hashtext(${ownerUserId}))`;
+      const open = await tx.wallet.count({
+        where: { ownerUserId, status: { not: WalletStatus.closed } },
+      });
+      if (open >= this.maxPerUser) throw walletLimitReached(this.maxPerUser);
       const account = await this.ledger.openWalletAccount(currency, tx);
       return this.create(
         { ownerUserId, currency, ledgerAccountId: account.id, label },

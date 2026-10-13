@@ -1,5 +1,7 @@
 import type { PrismaService } from '../../database/prisma.service.js';
 import { Prisma } from '../../generated/prisma/client.js';
+import type { ConfigService } from '@nestjs/config';
+import type { EnvironmentVariables } from '../../config/env.validation.js';
 import type { LedgerService } from '../ledger/ledger.service.js';
 import { WalletsService } from './wallets.service.js';
 
@@ -35,10 +37,14 @@ const row = (
   updatedAt: new Date('2026-10-13T18:30:00Z'),
 });
 
+const MAX_PER_USER = 3;
+
 describe('WalletsService', () => {
   let wallet: Record<string, ReturnType<typeof vi.fn>>;
   let ledger: Record<string, ReturnType<typeof vi.fn>>;
   let withTx: ReturnType<typeof vi.fn>;
+  let lockRaw: ReturnType<typeof vi.fn>;
+  let tx: Record<string, unknown>;
   let service: WalletsService;
 
   beforeEach(() => {
@@ -48,6 +54,7 @@ describe('WalletsService', () => {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
       findMany: vi.fn(),
+      count: vi.fn().mockResolvedValue(0),
     };
     ledger = {
       openWalletAccount: vi.fn(),
@@ -55,11 +62,14 @@ describe('WalletsService', () => {
         async (ids: string[]) => new Map(ids.map((id) => [id, '0.00'])),
       ),
     };
-    const tx = { wallet };
+    lockRaw = vi.fn().mockResolvedValue(1);
+    tx = { wallet, $executeRaw: lockRaw };
     withTx = vi.fn((fn: (t: typeof tx) => unknown) => fn(tx));
+    const config = { get: vi.fn().mockReturnValue(MAX_PER_USER) };
     service = new WalletsService(
       { wallet, withTx } as unknown as PrismaService,
       ledger as unknown as LedgerService,
+      config as unknown as ConfigService<EnvironmentVariables, true>,
     );
   });
 
@@ -79,7 +89,6 @@ describe('WalletsService', () => {
         updatedAt: '2026-10-13T18:30:00.000Z',
       });
       expect(withTx).toHaveBeenCalledOnce();
-      const tx = { wallet };
       expect(ledger.openWalletAccount).toHaveBeenCalledWith('AED', tx);
       expect(wallet.create).toHaveBeenCalledWith({
         data: {
@@ -97,6 +106,39 @@ describe('WalletsService', () => {
     ])('rejects %o with %s before any transaction', async (input, code) => {
       await expect(service.open('u1', input)).rejects.toMatchObject({ code });
       expect(withTx).not.toHaveBeenCalled();
+    });
+
+    it('locks per owner, then counts the wallets that are not closed', async () => {
+      ledger.openWalletAccount.mockResolvedValue({ id: 'acc1' });
+      wallet.create.mockResolvedValue(row('w1', 'acc1'));
+      wallet.count.mockResolvedValue(MAX_PER_USER - 1);
+      await service.open('u1', { currency: 'AED' });
+      expect(lockRaw).toHaveBeenCalledOnce();
+      expect(lockRaw.mock.calls[0].slice(1)).toEqual(['u1']);
+      expect(lockRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        wallet.count.mock.invocationCallOrder[0],
+      );
+      expect(wallet.count).toHaveBeenCalledWith({
+        where: { ownerUserId: 'u1', status: { not: 'closed' } },
+      });
+    });
+
+    it('answers WALLET_LIMIT_REACHED (422) at the limit and opens no account', async () => {
+      wallet.count.mockResolvedValue(MAX_PER_USER);
+      await expect(
+        service.open('u1', { currency: 'AED' }),
+      ).rejects.toMatchObject({
+        code: 'WALLET_LIMIT_REACHED',
+        statusCode: 422,
+        details: [
+          {
+            field: 'currency',
+            issue: `at most ${MAX_PER_USER} open wallets per user`,
+          },
+        ],
+      });
+      expect(ledger.openWalletAccount).not.toHaveBeenCalled();
+      expect(wallet.create).not.toHaveBeenCalled();
     });
 
     it('never answers without the balance (missing account is a bug)', async () => {
