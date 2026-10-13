@@ -1,0 +1,1702 @@
+{
+  "auth": {
+    "bearer": [
+      {
+        "key": "token",
+        "type": "string",
+        "value": "{{accessToken}}"
+      }
+    ],
+    "type": "bearer"
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "exec": [
+          "// Every response: the API envelope (statusCode = HTTP status, meta.requestId, UPPER_SNAKE_CASE",
+          "// error codes) and money as decimal strings. operationId is set by each request's pre-request.",
+          "const operationId = pm.variables.get('operationId');",
+          "const status = pm.response.code;",
+          "// Failures a request may answer in a normal run (e.g. the fixed dev user already exists)",
+          "const tolerated = { 'auth.register': ['EMAIL_TAKEN'] };",
+          "const MONEY_KEYS = ['amount', 'balance', 'fee', 'total'];",
+          "",
+          "let body;",
+          "pm.test(`${operationId}: JSON envelope`, () => {",
+          "  body = pm.response.json();",
+          "  pm.expect(body.statusCode, 'statusCode').to.eql(status);",
+          "  pm.expect(body.meta && body.meta.requestId, 'meta.requestId').to.be.a('string');",
+          "});",
+          "",
+          "if (body && status < 400) {",
+          "  pm.test(`${operationId}: success envelope`, () => {",
+          "    pm.expect(body.success).to.eql(true);",
+          "    pm.expect(body).to.have.property('data');",
+          "  });",
+          "  const walk = (value, path) => {",
+          "    if (Array.isArray(value)) value.forEach((v, i) => walk(v, `${path}[${i}]`));",
+          "    else if (value && typeof value === 'object')",
+          "      Object.keys(value).forEach((k) => {",
+          "        if (MONEY_KEYS.includes(k))",
+          "          pm.test(`${operationId}: ${path}.${k} is a decimal string`, () =>",
+          "            pm.expect(value[k]).to.be.a('string').and.match(/^-?\\d+(\\.\\d+)?$/),",
+          "          );",
+          "        walk(value[k], `${path}.${k}`);",
+          "      });",
+          "  };",
+          "  walk(body.data, 'data');",
+          "} else if (body) {",
+          "  pm.test(`${operationId}: failure envelope`, () => {",
+          "    pm.expect(body.success).to.eql(false);",
+          "    pm.expect(body.error.code).to.match(/^[A-Z][A-Z0-9_]*$/);",
+          "  });",
+          "  pm.test(`${operationId}: answered ${status} ${body.error.code}`, () =>",
+          "    pm.expect(tolerated[operationId] || []).to.include(body.error.code),",
+          "  );",
+          "}"
+        ],
+        "type": "text/javascript"
+      }
+    }
+  ],
+  "info": {
+    "_postman_id": "e98c27b4-beca-5696-a6de-1adfc20e3b6d",
+    "description": "Every response uses the envelope: success `{ success, statusCode, message, data, meta }`, failure `{ success, statusCode, error: { code, message, details? }, meta }`. Money amounts are decimal strings.",
+    "name": "Fintech Monolith API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "event": [],
+      "id": "e2e55b1a-c383-573d-a0d3-221e08f7b309",
+      "item": [
+        {
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('operationId', 'app.root');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "3485b13a-9a0c-5761-a6ca-4ecb935881ad",
+          "name": "API root (answers without dependencies)",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {},
+            "description": "API root (answers without dependencies)",
+            "header": [],
+            "method": "GET",
+            "name": "API root (answers without dependencies)",
+            "url": {
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [],
+              "raw": "{{baseUrl}}/"
+            }
+          },
+          "response": [
+            {
+              "_postman_previewlanguage": "text",
+              "code": 200,
+              "header": [],
+              "id": "3071030f-cdec-5f87-a15b-b411f56c1358",
+              "name": "200",
+              "status": "OK"
+            }
+          ]
+        },
+        {
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('operationId', 'health.live');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "d05cf26b-e8ca-51c7-a8cc-dd683c3029cb",
+          "name": "Liveness probe (process only, no dependencies)",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {},
+            "description": "Liveness probe (process only, no dependencies)",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "name": "Liveness probe (process only, no dependencies)",
+            "url": {
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health",
+                "live"
+              ],
+              "raw": "{{baseUrl}}/health/live"
+            }
+          },
+          "response": [
+            {
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"OK\",\n  \"meta\": {\n    \"requestId\": \"req_6ce0eecd9fd7a31fdae9f47b\"\n  },\n  \"data\": {\n    \"status\": \"ok\",\n    \"info\": {\n      \"database\": {\n        \"status\": \"up\",\n        \"responseTime\": 3\n      }\n    },\n    \"error\": {},\n    \"details\": {}\n  }\n}",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "1769a689-33b0-5e45-a10d-90c0dcd10ae4",
+              "name": "200",
+              "status": "OK"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 503,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "d1761bd2-ec58-5ff3-adf1-fa619d76fce3",
+              "name": "Heap above the limit",
+              "status": "Service Unavailable"
+            }
+          ]
+        },
+        {
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('operationId', 'health.ready');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "e1a58a05-6630-5a49-aa77-24845ecfe631",
+          "name": "Readiness probe (PostgreSQL, Redis, OpenBao)",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {},
+            "description": "Readiness probe (PostgreSQL, Redis, OpenBao)",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "name": "Readiness probe (PostgreSQL, Redis, OpenBao)",
+            "url": {
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health",
+                "ready"
+              ],
+              "raw": "{{baseUrl}}/health/ready"
+            }
+          },
+          "response": [
+            {
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"OK\",\n  \"meta\": {\n    \"requestId\": \"req_6ce0eecd9fd7a31fdae9f47b\"\n  },\n  \"data\": {\n    \"status\": \"ok\",\n    \"info\": {\n      \"database\": {\n        \"status\": \"up\",\n        \"responseTime\": 3\n      }\n    },\n    \"error\": {},\n    \"details\": {}\n  }\n}",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "743be011-47cf-599c-ae4e-86d0ae5b441e",
+              "name": "200",
+              "status": "OK"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 503,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "704a4141-a243-5a21-ac3f-22a34587b690",
+              "name": "A dependency is down; error.details names it",
+              "status": "Service Unavailable"
+            }
+          ]
+        }
+      ],
+      "name": "Health"
+    },
+    {
+      "event": [],
+      "id": "9799495f-6cb3-51d3-aef5-0465d218f8ef",
+      "item": [
+        {
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('operationId', 'auth.register');",
+                  "// freshUser = true (Newman runs): a new user per run, so wallet limits and TOTP state never carry over",
+                  "if (pm.environment.get('freshUser') === 'true') {",
+                  "  pm.environment.set('userEmail', `newman-${pm.variables.replaceIn('{{$guid}}')}@example.com`);",
+                  "  pm.environment.unset('totpSecret');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "48ff5301-7445-5c80-a12a-579c5ac7db73",
+          "name": "Create a user account (role `user`)",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}"
+            },
+            "description": "Create a user account (role `user`)",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "name": "Create a user account (role `user`)",
+            "url": {
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ],
+              "raw": "{{baseUrl}}/auth/register"
+            }
+          },
+          "response": [
+            {
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"OK\",\n  \"meta\": {\n    \"requestId\": \"req_6ce0eecd9fd7a31fdae9f47b\"\n  },\n  \"data\": {\n    \"id\": \"019a1b2c-3d4e-7f60-8a9b-0c1d2e3f4a5b\",\n    \"email\": \"alice@example.com\",\n    \"roles\": [\n      \"user\"\n    ],\n    \"status\": \"active\",\n    \"totpEnabled\": false,\n    \"createdAt\": \"2026-10-12T18:30:00.000Z\"\n  }\n}",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "3e0dcc75-d6fb-5c97-a672-1ed12cdfb11e",
+              "name": "201",
+              "status": "Created"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "5a2f7ad1-c06c-5116-ab56-bbe993702522",
+              "name": "VALIDATION_FAILED",
+              "status": "Bad Request"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "6a2a5ec3-6e33-54cd-a664-a032e30c17ce",
+              "name": "EMAIL_TAKEN",
+              "status": "Conflict"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "a94e670a-d884-54e3-a804-3826df2e9772",
+              "name": "TOO_MANY_REQUESTS (per IP, and per account on login / register); see Retry-After",
+              "status": "Too Many Requests"
+            }
+          ]
+        },
+        {
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('operationId', 'auth.login');",
+                  "// Once TOTP is enabled (totpSecret set by auth.totpSetup), login needs a current code.",
+                  "// A code works once: wait for the next 30 s step after auth.totpEnable before logging in again.",
+                  "// TOTP (RFC 6238: SHA-1, 6 digits, 30 s) from a base32 secret, with CryptoJS (no Node APIs).",
+                  "const cryptoJs = require('crypto-js');",
+                  "function totp(base32Secret) {",
+                  "  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';",
+                  "  let bits = '';",
+                  "  for (const c of base32Secret.replace(/=+$/, '').toUpperCase()) {",
+                  "    const v = alphabet.indexOf(c);",
+                  "    if (v < 0) throw new Error('totpSecret is not base32');",
+                  "    bits += v.toString(2).padStart(5, '0');",
+                  "  }",
+                  "  let keyHex = '';",
+                  "  for (let i = 0; i + 8 <= bits.length; i += 8)",
+                  "    keyHex += parseInt(bits.slice(i, i + 8), 2).toString(16).padStart(2, '0');",
+                  "  const counter = Math.floor(Date.now() / 1000 / 30).toString(16).padStart(16, '0');",
+                  "  const mac = cryptoJs.HmacSHA1(",
+                  "    cryptoJs.enc.Hex.parse(counter),",
+                  "    cryptoJs.enc.Hex.parse(keyHex),",
+                  "  ).toString(cryptoJs.enc.Hex);",
+                  "  const offset = parseInt(mac.slice(-1), 16);",
+                  "  const code = (parseInt(mac.slice(offset * 2, offset * 2 + 8), 16) & 0x7fffffff) % 1000000;",
+                  "  return code.toString().padStart(6, '0');",
+                  "}",
+                  "const secret = pm.environment.get('totpSecret');",
+                  "if (secret) {",
+                  "  const body = JSON.parse(pm.variables.replaceIn(pm.request.body.raw));",
+                  "  body.totpCode = totp(secret);",
+                  "  pm.request.body.update(JSON.stringify(body, null, 2));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const { accessToken, refreshToken } = pm.response.json().data;",
+                  "  pm.environment.set('accessToken', accessToken);",
+                  "  pm.environment.set('refreshToken', refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "7e15e561-7215-53ca-a6de-9f4c08e5671e",
+          "name": "Exchange email, password (and TOTP code once enabled) for tokens",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}"
+            },
+            "description": "Exchange email, password (and TOTP code once enabled) for tokens",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "name": "Exchange email, password (and TOTP code once enabled) for tokens",
+            "url": {
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ],
+              "raw": "{{baseUrl}}/auth/login"
+            }
+          },
+          "response": [
+            {
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"OK\",\n  \"meta\": {\n    \"requestId\": \"req_6ce0eecd9fd7a31fdae9f47b\"\n  },\n  \"data\": {\n    \"accessToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n    \"refreshToken\": \"q8Jk0Vn3m6v5yQ0b8R2xT1c4Zp7Lw9Hs3Df6Gj1Ka2E\",\n    \"tokenType\": \"Bearer\",\n    \"expiresIn\": 900,\n    \"mfa\": false\n  }\n}",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "eb2d8a31-e220-591d-a296-80fe2f0eb04e",
+              "name": "200",
+              "status": "OK"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "d5628921-6bd1-51a0-acce-97b22cbad412",
+              "name": "INVALID_CREDENTIALS, TOTP_REQUIRED or INVALID_TOTP",
+              "status": "Unauthorized"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "e395b582-5bdc-589e-a191-452080fccf36",
+              "name": "ACCOUNT_INACTIVE",
+              "status": "Forbidden"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "d6261b1a-a268-5031-ac3c-37e4f21bb495",
+              "name": "TOO_MANY_REQUESTS (per IP, and per account on login / register); see Retry-After",
+              "status": "Too Many Requests"
+            }
+          ]
+        },
+        {
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('operationId', 'auth.refresh');"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// The old refresh token is spent; keep the rotated pair",
+                  "if (pm.response.code === 200) {",
+                  "  const { accessToken, refreshToken } = pm.response.json().data;",
+                  "  pm.environment.set('accessToken', accessToken);",
+                  "  pm.environment.set('refreshToken', refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "96476dee-cf06-568a-ab54-b9d1a368e918",
+          "name": "Rotate the refresh token and get a new access token",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "description": "Rotate the refresh token and get a new access token",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "name": "Rotate the refresh token and get a new access token",
+            "url": {
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ],
+              "raw": "{{baseUrl}}/auth/refresh"
+            }
+          },
+          "response": [
+            {
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"OK\",\n  \"meta\": {\n    \"requestId\": \"req_6ce0eecd9fd7a31fdae9f47b\"\n  },\n  \"data\": {\n    \"accessToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n    \"refreshToken\": \"q8Jk0Vn3m6v5yQ0b8R2xT1c4Zp7Lw9Hs3Df6Gj1Ka2E\",\n    \"tokenType\": \"Bearer\",\n    \"expiresIn\": 900,\n    \"mfa\": false\n  }\n}",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "8ac34c05-4659-594d-a8fb-ec3f74d76055",
+              "name": "200",
+              "status": "OK"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "5f5e20af-8a73-5168-a18b-e8404683fd73",
+              "name": "INVALID_REFRESH_TOKEN, or REFRESH_TOKEN_REUSED (the session is revoked)",
+              "status": "Unauthorized"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "9e1042a7-b3b0-5a8a-a486-51fc246f9fc6",
+              "name": "ACCOUNT_INACTIVE",
+              "status": "Forbidden"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "dfa9aab2-c635-580f-a717-545c529d88ab",
+              "name": "TOO_MANY_REQUESTS (per IP, and per account on login / register); see Retry-After",
+              "status": "Too Many Requests"
+            }
+          ]
+        },
+        {
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('operationId', 'auth.me');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "2c62af5c-328e-5fa5-aeac-8bc3181426a7",
+          "name": "The current user",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "body": {},
+            "description": "The current user",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "name": "The current user",
+            "url": {
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ],
+              "raw": "{{baseUrl}}/auth/me"
+            }
+          },
+          "response": [
+            {
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"OK\",\n  \"meta\": {\n    \"requestId\": \"req_6ce0eecd9fd7a31fdae9f47b\"\n  },\n  \"data\": {\n    \"id\": \"019a1b2c-3d4e-7f60-8a9b-0c1d2e3f4a5b\",\n    \"email\": \"alice@example.com\",\n    \"roles\": [\n      \"user\"\n    ],\n    \"status\": \"active\",\n    \"totpEnabled\": false,\n    \"createdAt\": \"2026-10-12T18:30:00.000Z\"\n  }\n}",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "0c223061-241d-51be-a5d8-141ab8f1e591",
+              "name": "200",
+              "status": "OK"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "adc1265b-5539-5bb5-ad6d-b96df6c25ebf",
+              "name": "Missing, invalid or expired access token",
+              "status": "Unauthorized"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "259b71e3-4575-5fc4-a2e3-83b8672e9aa7",
+              "name": "TOO_MANY_REQUESTS (per IP, and per account on login / register); see Retry-After",
+              "status": "Too Many Requests"
+            }
+          ]
+        },
+        {
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('operationId', 'auth.totpSetup');"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) pm.environment.set('totpSecret', pm.response.json().data.secret);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "d305bbea-6c8b-5685-acb7-d2ba4a1a6d13",
+          "name": "Start TOTP enrollment (new secret, replaces a pending one)",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "body": {},
+            "description": "Start TOTP enrollment (new secret, replaces a pending one)",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "name": "Start TOTP enrollment (new secret, replaces a pending one)",
+            "url": {
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "totp",
+                "setup"
+              ],
+              "raw": "{{baseUrl}}/auth/totp/setup"
+            }
+          },
+          "response": [
+            {
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"OK\",\n  \"meta\": {\n    \"requestId\": \"req_6ce0eecd9fd7a31fdae9f47b\"\n  },\n  \"data\": {\n    \"otpauthUri\": \"otpauth://totp/Fintech:alice%40example.com?secret=JBSWY3DPEHPK3PXP&issuer=Fintech&algorithm=SHA1&digits=6&period=30\",\n    \"secret\": \"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\"\n  }\n}",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "2a346942-89d4-5b6c-a4bc-e2ad6a87f37d",
+              "name": "200",
+              "status": "OK"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "8aca5327-56ea-5716-a081-49c2fae6e537",
+              "name": "TOTP_ALREADY_ENABLED",
+              "status": "Conflict"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "c69d49f4-9650-5a47-a960-38d13465f834",
+              "name": "TOO_MANY_REQUESTS (per IP, and per account on login / register); see Retry-After",
+              "status": "Too Many Requests"
+            }
+          ]
+        },
+        {
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('operationId', 'auth.totpEnable');",
+                  "// Confirms the secret from auth.totpSetup with the current code",
+                  "// TOTP (RFC 6238: SHA-1, 6 digits, 30 s) from a base32 secret, with CryptoJS (no Node APIs).",
+                  "const cryptoJs = require('crypto-js');",
+                  "function totp(base32Secret) {",
+                  "  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';",
+                  "  let bits = '';",
+                  "  for (const c of base32Secret.replace(/=+$/, '').toUpperCase()) {",
+                  "    const v = alphabet.indexOf(c);",
+                  "    if (v < 0) throw new Error('totpSecret is not base32');",
+                  "    bits += v.toString(2).padStart(5, '0');",
+                  "  }",
+                  "  let keyHex = '';",
+                  "  for (let i = 0; i + 8 <= bits.length; i += 8)",
+                  "    keyHex += parseInt(bits.slice(i, i + 8), 2).toString(16).padStart(2, '0');",
+                  "  const counter = Math.floor(Date.now() / 1000 / 30).toString(16).padStart(16, '0');",
+                  "  const mac = cryptoJs.HmacSHA1(",
+                  "    cryptoJs.enc.Hex.parse(counter),",
+                  "    cryptoJs.enc.Hex.parse(keyHex),",
+                  "  ).toString(cryptoJs.enc.Hex);",
+                  "  const offset = parseInt(mac.slice(-1), 16);",
+                  "  const code = (parseInt(mac.slice(offset * 2, offset * 2 + 8), 16) & 0x7fffffff) % 1000000;",
+                  "  return code.toString().padStart(6, '0');",
+                  "}",
+                  "const secret = pm.environment.get('totpSecret');",
+                  "if (!secret) throw new Error('totpSecret is empty: send auth.totpSetup first');",
+                  "pm.variables.set('totpCode', totp(secret));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "6aa4ff4a-80d0-5d90-aa46-5a108ed5db28",
+          "name": "Confirm TOTP enrollment with a first code",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"code\": \"{{totpCode}}\"\n}"
+            },
+            "description": "Confirm TOTP enrollment with a first code",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "name": "Confirm TOTP enrollment with a first code",
+            "url": {
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "totp",
+                "enable"
+              ],
+              "raw": "{{baseUrl}}/auth/totp/enable"
+            }
+          },
+          "response": [
+            {
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"OK\",\n  \"meta\": {\n    \"requestId\": \"req_6ce0eecd9fd7a31fdae9f47b\"\n  },\n  \"data\": {\n    \"totpEnabled\": true\n  }\n}",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "9a6a87b4-60f0-59c2-a224-b9247759bd2d",
+              "name": "200",
+              "status": "OK"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "978768ed-ed4b-551e-a13d-d25e97f1f958",
+              "name": "TOTP_NOT_SET_UP or TOTP_ALREADY_ENABLED",
+              "status": "Conflict"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "4154a1fe-d2bf-5c16-aa94-3246c054b1be",
+              "name": "INVALID_TOTP",
+              "status": "Unprocessable Entity (WebDAV) (RFC 4918)"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "75a748ee-be98-5eda-ac5f-6397c03f4ec0",
+              "name": "TOO_MANY_REQUESTS (per IP, and per account on login / register); see Retry-After",
+              "status": "Too Many Requests"
+            }
+          ]
+        },
+        {
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('operationId', 'auth.logout');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "3fa5dc1a-36c8-5d65-a330-6547f68ef5b7",
+          "name": "Revoke the session of a refresh token (always succeeds)",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "description": "Revoke the session of a refresh token (always succeeds)",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "name": "Revoke the session of a refresh token (always succeeds)",
+            "url": {
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ],
+              "raw": "{{baseUrl}}/auth/logout"
+            }
+          },
+          "response": [
+            {
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"OK\",\n  \"meta\": {\n    \"requestId\": \"req_6ce0eecd9fd7a31fdae9f47b\"\n  },\n  \"data\": {\n    \"loggedOut\": true\n  }\n}",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "cb00359b-7c9f-5f2f-abac-db5ef41b02e7",
+              "name": "200",
+              "status": "OK"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "509d5410-a201-535a-a34c-397de95c72b0",
+              "name": "TOO_MANY_REQUESTS (per IP, and per account on login / register); see Retry-After",
+              "status": "Too Many Requests"
+            }
+          ]
+        }
+      ],
+      "name": "Auth"
+    },
+    {
+      "event": [],
+      "id": "26c91a74-8864-53b2-ab35-91bebc758bea",
+      "item": [
+        {
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('operationId', 'wallets.create');"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const wallet = pm.response.json().data;",
+                  "  pm.environment.set('walletId', wallet.id);",
+                  "  pm.test('wallets.create: new wallet starts at zero', () =>",
+                  "    pm.expect(Number(wallet.balance)).to.eql(0),",
+                  "  );",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "49a0bd8e-8555-55cb-aa6e-f7fefae04e40",
+          "name": "Open a wallet in a currency (several per currency allowed)",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"currency\": \"{{currency}}\",\n  \"label\": \"Savings\"\n}"
+            },
+            "description": "Open a wallet in a currency (several per currency allowed)",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "name": "Open a wallet in a currency (several per currency allowed)",
+            "url": {
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "wallets"
+              ],
+              "raw": "{{baseUrl}}/wallets"
+            }
+          },
+          "response": [
+            {
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"OK\",\n  \"meta\": {\n    \"requestId\": \"req_6ce0eecd9fd7a31fdae9f47b\"\n  },\n  \"data\": {\n    \"id\": \"019a1b2c-3d4e-7f60-8a9b-0c1d2e3f4a5b\",\n    \"currency\": \"AED\",\n    \"label\": \"Savings\",\n    \"status\": \"active\",\n    \"balance\": \"1500.00\",\n    \"createdAt\": \"2026-10-13T18:30:00.000Z\",\n    \"updatedAt\": \"2026-10-13T18:30:00.000Z\"\n  }\n}",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "ebccbc60-48a1-5048-a85b-c755dcb62fe4",
+              "name": "201",
+              "status": "Created"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "ae43df6f-40fd-5c1e-a475-0b1ab6bbd4cb",
+              "name": "VALIDATION_FAILED",
+              "status": "Bad Request"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "f3c5ec59-ec58-5deb-a8c7-626814e2a253",
+              "name": "Missing, invalid or expired access token",
+              "status": "Unauthorized"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "f08701e0-7527-5304-abc4-a686804218f0",
+              "name": "UNSUPPORTED_CURRENCY, INVALID_LABEL, or WALLET_LIMIT_REACHED (WALLETS_MAX_PER_USER wallets that are not closed)",
+              "status": "Unprocessable Entity (WebDAV) (RFC 4918)"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 429,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "afe01713-a54b-5ac6-a873-cb2300bbecc1",
+              "name": "TOO_MANY_REQUESTS",
+              "status": "Too Many Requests"
+            }
+          ]
+        },
+        {
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('operationId', 'wallets.list');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "3a44b9b1-4c3b-5a86-a447-89ff43fe1cf3",
+          "name": "The caller's wallets with balances, oldest first (cursor pages)",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "body": {},
+            "description": "The caller's wallets with balances, oldest first (cursor pages)",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "name": "The caller's wallets with balances, oldest first (cursor pages)",
+            "url": {
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "wallets"
+              ],
+              "query": [
+                {
+                  "description": {
+                    "content": "`nextCursor` of the previous page; omit for the first page",
+                    "type": "text/plain"
+                  },
+                  "disabled": true,
+                  "key": "cursor",
+                  "value": "019a1b2c-3d4e-7f60-8a9b-0c1d2e3f4a5b"
+                },
+                {
+                  "description": {
+                    "content": "",
+                    "type": "text/plain"
+                  },
+                  "disabled": true,
+                  "key": "limit",
+                  "value": "20"
+                }
+              ],
+              "raw": "{{baseUrl}}/wallets"
+            }
+          },
+          "response": [
+            {
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"OK\",\n  \"meta\": {\n    \"requestId\": \"req_6ce0eecd9fd7a31fdae9f47b\"\n  },\n  \"data\": {\n    \"items\": [\n      {\n        \"id\": \"019a1b2c-3d4e-7f60-8a9b-0c1d2e3f4a5b\",\n        \"currency\": \"AED\",\n        \"label\": \"Savings\",\n        \"status\": \"active\",\n        \"balance\": \"1500.00\",\n        \"createdAt\": \"2026-10-13T18:30:00.000Z\",\n        \"updatedAt\": \"2026-10-13T18:30:00.000Z\"\n      },\n      {\n        \"id\": \"019a1b2c-3d4e-7f60-8a9b-0c1d2e3f4a5b\",\n        \"currency\": \"AED\",\n        \"label\": \"Savings\",\n        \"status\": \"active\",\n        \"balance\": \"1500.00\",\n        \"createdAt\": \"2026-10-13T18:30:00.000Z\",\n        \"updatedAt\": \"2026-10-13T18:30:00.000Z\"\n      }\n    ],\n    \"nextCursor\": \"019a1b2c-3d4e-7f60-8a9b-0c1d2e3f4a5b\"\n  }\n}",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "39a29fe0-3aea-5378-a691-c3b3f73414c6",
+              "name": "200",
+              "status": "OK"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "d4bb6b4d-bd80-5e0e-ae84-2ef9f96f69bd",
+              "name": "VALIDATION_FAILED",
+              "status": "Bad Request"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "a4662e06-a2ef-5882-ac21-17322d54be41",
+              "name": "Missing, invalid or expired access token",
+              "status": "Unauthorized"
+            }
+          ]
+        },
+        {
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('operationId', 'wallets.get');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "dd63ff78-4f4b-5605-abde-34dc9f21b2cb",
+          "name": "One of the caller's wallets with its balance",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "body": {},
+            "description": "One of the caller's wallets with its balance",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "name": "One of the caller's wallets with its balance",
+            "url": {
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "wallets",
+                ":id"
+              ],
+              "raw": "{{baseUrl}}/wallets/:id",
+              "variable": [
+                {
+                  "description": {
+                    "content": "(Required) ",
+                    "type": "text/plain"
+                  },
+                  "key": "id",
+                  "value": "{{walletId}}"
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"OK\",\n  \"meta\": {\n    \"requestId\": \"req_6ce0eecd9fd7a31fdae9f47b\"\n  },\n  \"data\": {\n    \"id\": \"019a1b2c-3d4e-7f60-8a9b-0c1d2e3f4a5b\",\n    \"currency\": \"AED\",\n    \"label\": \"Savings\",\n    \"status\": \"active\",\n    \"balance\": \"1500.00\",\n    \"createdAt\": \"2026-10-13T18:30:00.000Z\",\n    \"updatedAt\": \"2026-10-13T18:30:00.000Z\"\n  }\n}",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "cc2fd16a-3007-514c-af4d-8df616c205fe",
+              "name": "200",
+              "status": "OK"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "cc54c913-e736-5b4a-a334-2059a113cae2",
+              "name": "VALIDATION_FAILED",
+              "status": "Bad Request"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "5439b06c-7344-5945-a902-535142f49387",
+              "name": "Missing, invalid or expired access token",
+              "status": "Unauthorized"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "5c9ab264-f700-5fd3-a54a-366de65f23b8",
+              "name": "WALLET_NOT_FOUND (also for another user's wallet)",
+              "status": "Not Found"
+            }
+          ]
+        },
+        {
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('operationId', 'wallets.rename');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "bc729078-5be1-5da3-a9a5-d27f78b8fd29",
+          "name": "Set or clear (null) the label of one of the caller's wallets",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"label\": \"Travel\"\n}"
+            },
+            "description": "Set or clear (null) the label of one of the caller's wallets",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "PATCH",
+            "name": "Set or clear (null) the label of one of the caller's wallets",
+            "url": {
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "wallets",
+                ":id"
+              ],
+              "raw": "{{baseUrl}}/wallets/:id",
+              "variable": [
+                {
+                  "description": {
+                    "content": "(Required) ",
+                    "type": "text/plain"
+                  },
+                  "key": "id",
+                  "value": "{{walletId}}"
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"OK\",\n  \"meta\": {\n    \"requestId\": \"req_6ce0eecd9fd7a31fdae9f47b\"\n  },\n  \"data\": {\n    \"id\": \"019a1b2c-3d4e-7f60-8a9b-0c1d2e3f4a5b\",\n    \"currency\": \"AED\",\n    \"label\": \"Savings\",\n    \"status\": \"active\",\n    \"balance\": \"1500.00\",\n    \"createdAt\": \"2026-10-13T18:30:00.000Z\",\n    \"updatedAt\": \"2026-10-13T18:30:00.000Z\"\n  }\n}",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "7edbe0bb-a454-53e8-a947-dcc8cfd6d0af",
+              "name": "200",
+              "status": "OK"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "0dab7b93-e648-522c-ae83-8a557a06c431",
+              "name": "VALIDATION_FAILED",
+              "status": "Bad Request"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "a0d0b596-d390-5a8c-a0a9-73245e4fda29",
+              "name": "Missing, invalid or expired access token",
+              "status": "Unauthorized"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "3623e4ef-e7a0-5485-a024-42c63e844818",
+              "name": "WALLET_NOT_FOUND (also for another user's wallet)",
+              "status": "Not Found"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "62a1f062-e017-51ee-a7a9-7884bd7173fd",
+              "name": "WALLET_CLOSED",
+              "status": "Conflict"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "8dbb6ce0-f8ef-580e-a64c-069464230004",
+              "name": "INVALID_LABEL",
+              "status": "Unprocessable Entity (WebDAV) (RFC 4918)"
+            }
+          ]
+        }
+      ],
+      "name": "Wallets"
+    },
+    {
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// B2B signed request (A-B4.5): HMAC-SHA256 over",
+              "//   METHOD \\n path?query \\n timestamp \\n nonce \\n hex(sha256(raw body))",
+              "// with the dev-client secret (b2bSecret, filled by npm run postman:env). Ed25519 clients use",
+              "// scripts/sign-request.ts instead (the sandbox has no Ed25519).",
+              "const cryptoJs = require('crypto-js');",
+              "const clientId = pm.environment.get('b2bClientId');",
+              "const secret = pm.environment.get('b2bSecret');",
+              "if (!clientId || !secret)",
+              "  throw new Error('b2bClientId / b2bSecret are empty: run npm run postman:env');",
+              "",
+              "const url = pm.variables.replaceIn(pm.request.url.toString());",
+              "const path = url.replace(/^[a-z]+:\\/\\/[^/]+/i, '');",
+              "const raw = pm.request.body && pm.request.body.raw ? pm.variables.replaceIn(pm.request.body.raw) : '';",
+              "// The signature covers these exact bytes, so send the resolved body",
+              "if (raw) pm.request.body.update(raw);",
+              "",
+              "const timestamp = Math.floor(Date.now() / 1000).toString();",
+              "const nonce = pm.variables.replaceIn('{{$guid}}').replace(/-/g, '');",
+              "const canonical = [",
+              "  pm.request.method.toUpperCase(),",
+              "  path,",
+              "  timestamp,",
+              "  nonce,",
+              "  cryptoJs.SHA256(raw).toString(cryptoJs.enc.Hex),",
+              "].join('\\n');",
+              "",
+              "pm.request.headers.upsert({ key: 'x-client-id', value: clientId });",
+              "pm.request.headers.upsert({ key: 'x-timestamp', value: timestamp });",
+              "pm.request.headers.upsert({ key: 'x-nonce', value: nonce });",
+              "pm.request.headers.upsert({",
+              "  key: 'x-signature',",
+              "  value: cryptoJs.HmacSHA256(canonical, secret).toString(cryptoJs.enc.Base64),",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "id": "63248e03-a172-5fdf-a642-59ae4f416254",
+      "item": [
+        {
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('operationId', 'b2b.ping');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "5a58a482-1159-5807-a634-61ca90ccd6e6",
+          "name": "Check request signing: answers only a correctly signed, fresh request",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"message\": \"hello\"\n}"
+            },
+            "description": "Check request signing: answers only a correctly signed, fresh request",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "name": "Check request signing: answers only a correctly signed, fresh request",
+            "url": {
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "b2b",
+                "ping"
+              ],
+              "raw": "{{baseUrl}}/b2b/ping"
+            }
+          },
+          "response": [
+            {
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"OK\",\n  \"meta\": {\n    \"requestId\": \"req_6ce0eecd9fd7a31fdae9f47b\"\n  },\n  \"data\": {\n    \"clientId\": \"dev-client\",\n    \"receivedAt\": \"2026-10-13T16:30:00.000Z\",\n    \"message\": \"hello\"\n  }\n}",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "7a3b1884-837a-592d-ad52-3d9b75a07cc9",
+              "name": "200",
+              "status": "OK"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "b9b31ac3-4410-53ff-abfa-6217534074bf",
+              "name": "SIGNATURE_HEADERS_INVALID, INVALID_SIGNATURE, REQUEST_EXPIRED or NONCE_REUSED",
+              "status": "Unauthorized"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 503,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "c5690683-06ac-585d-a67d-29e6de946bc0",
+              "name": "REQUEST_SIGNING_UNAVAILABLE",
+              "status": "Service Unavailable"
+            }
+          ]
+        }
+      ],
+      "name": "B2B"
+    }
+  ]
+}
