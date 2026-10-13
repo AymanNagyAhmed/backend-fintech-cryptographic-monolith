@@ -24,6 +24,7 @@ export const RATE_LIMITS = {
   refresh: { limit: 30, ttl: minutes(1) },
   logout: { limit: 30, ttl: minutes(1) },
   totp: { limit: 5, ttl: minutes(1), blockDuration: minutes(5) },
+  walletCreate: { limit: 10, ttl: minutes(1) },
 } as const;
 
 export const RATE_LIMIT_MESSAGE = 'Too many requests. Please retry later.';

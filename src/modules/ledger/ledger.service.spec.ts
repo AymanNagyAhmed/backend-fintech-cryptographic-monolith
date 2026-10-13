@@ -7,7 +7,12 @@ describe('LedgerService', () => {
   let service: LedgerService;
 
   beforeEach(() => {
-    account = { create: vi.fn(), upsert: vi.fn(), findUnique: vi.fn() };
+    account = {
+      create: vi.fn(),
+      upsert: vi.fn(),
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+    };
     service = new LedgerService({ account } as unknown as PrismaService);
   });
 
@@ -40,7 +45,7 @@ describe('LedgerService', () => {
   });
 
   describe('ensureSystemAccount', () => {
-    const input = { code: 'external_clearing:AED', currency: 'AED' };
+    const input = { code: 'external_clearing:aed', currency: 'AED' };
 
     it('upserts on the code without changing an existing account', async () => {
       account.upsert.mockResolvedValue({
@@ -75,6 +80,31 @@ describe('LedgerService', () => {
         });
       },
     );
+  });
+
+  describe('getBalances', () => {
+    it('formats balances at the currency scale, also tiny BTC amounts', async () => {
+      account.findMany.mockResolvedValue([
+        { id: 'a1', currency: 'AED', balance: new Prisma.Decimal('12.5') },
+        { id: 'a2', currency: 'BTC', balance: new Prisma.Decimal('1e-8') },
+        { id: 'a3', currency: 'USD', balance: new Prisma.Decimal('0') },
+      ]);
+      const balances = await service.getBalances(['a1', 'a2', 'a3', 'a1']);
+      expect(Object.fromEntries(balances)).toEqual({
+        a1: '12.50',
+        a2: '0.00000001',
+        a3: '0.00',
+      });
+      expect(account.findMany).toHaveBeenCalledWith({
+        where: { id: { in: ['a1', 'a2', 'a3'] } },
+        select: { id: true, balance: true, currency: true },
+      });
+    });
+
+    it('skips the database for no ids', async () => {
+      await expect(service.getBalances([])).resolves.toEqual(new Map());
+      expect(account.findMany).not.toHaveBeenCalled();
+    });
   });
 });
 

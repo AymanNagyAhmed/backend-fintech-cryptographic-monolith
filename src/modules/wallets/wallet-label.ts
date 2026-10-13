@@ -1,6 +1,8 @@
 import { invalidWalletLabel } from './exceptions/wallet.exceptions.js';
 
 export const WALLET_LABEL_MAX_LENGTH = 50;
+/** Bound on the raw request value (before trimming), so huge strings stop at validation. */
+export const WALLET_LABEL_INPUT_MAX = 200;
 
 /** C0, DEL and C1 control characters; same ranges as the wallets_label_chk CHECK. */
 const isControlChar = (char: string) => {

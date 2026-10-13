@@ -1,5 +1,6 @@
 import type { PrismaService } from '../../database/prisma.service.js';
 import { Prisma } from '../../generated/prisma/client.js';
+import type { LedgerService } from '../ledger/ledger.service.js';
 import { WalletsService } from './wallets.service.js';
 
 const input = {
@@ -19,8 +20,25 @@ const uniqueViolation = (index: string) =>
     },
   });
 
+const row = (
+  id: string,
+  ledgerAccountId: string,
+  label: string | null = null,
+) => ({
+  id,
+  ownerUserId: 'u1',
+  currency: 'AED',
+  ledgerAccountId,
+  label,
+  status: 'active',
+  createdAt: new Date('2026-10-13T18:00:00Z'),
+  updatedAt: new Date('2026-10-13T18:30:00Z'),
+});
+
 describe('WalletsService', () => {
   let wallet: Record<string, ReturnType<typeof vi.fn>>;
+  let ledger: Record<string, ReturnType<typeof vi.fn>>;
+  let withTx: ReturnType<typeof vi.fn>;
   let service: WalletsService;
 
   beforeEach(() => {
@@ -31,7 +49,126 @@ describe('WalletsService', () => {
       findFirst: vi.fn(),
       findMany: vi.fn(),
     };
-    service = new WalletsService({ wallet } as unknown as PrismaService);
+    ledger = {
+      openWalletAccount: vi.fn(),
+      getBalances: vi.fn(
+        async (ids: string[]) => new Map(ids.map((id) => [id, '0.00'])),
+      ),
+    };
+    const tx = { wallet };
+    withTx = vi.fn((fn: (t: typeof tx) => unknown) => fn(tx));
+    service = new WalletsService(
+      { wallet, withTx } as unknown as PrismaService,
+      ledger as unknown as LedgerService,
+    );
+  });
+
+  describe('open', () => {
+    it('opens the ledger account and the wallet in one transaction', async () => {
+      ledger.openWalletAccount.mockResolvedValue({ id: 'acc1' });
+      wallet.create.mockResolvedValue(row('w1', 'acc1', 'Savings'));
+      await expect(
+        service.open('u1', { currency: 'AED', label: ' Savings' }),
+      ).resolves.toEqual({
+        id: 'w1',
+        currency: 'AED',
+        label: 'Savings',
+        status: 'active',
+        balance: '0.00',
+        createdAt: '2026-10-13T18:00:00.000Z',
+        updatedAt: '2026-10-13T18:30:00.000Z',
+      });
+      expect(withTx).toHaveBeenCalledOnce();
+      const tx = { wallet };
+      expect(ledger.openWalletAccount).toHaveBeenCalledWith('AED', tx);
+      expect(wallet.create).toHaveBeenCalledWith({
+        data: {
+          ownerUserId: 'u1',
+          currency: 'AED',
+          ledgerAccountId: 'acc1',
+          label: 'Savings',
+        },
+      });
+    });
+
+    it.each([
+      [{ currency: 'GBP' }, 'UNSUPPORTED_CURRENCY'],
+      [{ currency: 'AED', label: '\u0007' }, 'INVALID_LABEL'],
+    ])('rejects %o with %s before any transaction', async (input, code) => {
+      await expect(service.open('u1', input)).rejects.toMatchObject({ code });
+      expect(withTx).not.toHaveBeenCalled();
+    });
+
+    it('never answers without the balance (missing account is a bug)', async () => {
+      ledger.openWalletAccount.mockResolvedValue({ id: 'acc1' });
+      wallet.create.mockResolvedValue(row('w1', 'acc1'));
+      ledger.getBalances.mockResolvedValue(new Map());
+      await expect(service.open('u1', { currency: 'AED' })).rejects.toThrow(
+        /Ledger account of wallet w1 not found/,
+      );
+    });
+  });
+
+  describe('getOwned', () => {
+    it('returns the wallet with its balance', async () => {
+      wallet.findFirst.mockResolvedValue(row('w1', 'acc1'));
+      ledger.getBalances.mockResolvedValue(new Map([['acc1', '12.50']]));
+      await expect(service.getOwned('w1', 'u1')).resolves.toMatchObject({
+        id: 'w1',
+        balance: '12.50',
+      });
+    });
+
+    it('answers WALLET_NOT_FOUND (404) for a wallet the caller does not own', async () => {
+      wallet.findFirst.mockResolvedValue(null);
+      await expect(service.getOwned('w1', 'u2')).rejects.toMatchObject({
+        code: 'WALLET_NOT_FOUND',
+        statusCode: 404,
+      });
+    });
+  });
+
+  describe('listPage', () => {
+    it('fetches one extra row to know whether a next page exists', async () => {
+      wallet.findMany.mockResolvedValue([
+        row('w1', 'a1'),
+        row('w2', 'a2'),
+        row('w3', 'a3'),
+      ]);
+      const page = await service.listPage('u1', { cursor: 'w0', limit: 2 });
+      expect(wallet.findMany).toHaveBeenCalledWith({
+        where: { ownerUserId: 'u1', id: { gt: 'w0' } },
+        orderBy: { id: 'asc' },
+        take: 3,
+      });
+      expect(page.items.map((w) => w.id)).toEqual(['w1', 'w2']);
+      expect(page.nextCursor).toBe('w2');
+      expect(ledger.getBalances).toHaveBeenCalledWith(['a1', 'a2']);
+    });
+
+    it('has no next cursor on the last page and no cursor filter on the first', async () => {
+      wallet.findMany.mockResolvedValue([row('w1', 'a1')]);
+      const page = await service.listPage('u1', { limit: 2 });
+      expect(wallet.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { ownerUserId: 'u1' } }),
+      );
+      expect(page.nextCursor).toBeNull();
+    });
+
+    it('returns an empty page for an owner without wallets', async () => {
+      wallet.findMany.mockResolvedValue([]);
+      await expect(service.listPage('u1', { limit: 20 })).resolves.toEqual({
+        items: [],
+        nextCursor: null,
+      });
+    });
+  });
+
+  it('renameOwned returns the renamed wallet with its balance', async () => {
+    wallet.update.mockResolvedValue(row('w1', 'acc1', 'Travel'));
+    await expect(
+      service.renameOwned('w1', 'u1', 'Travel'),
+    ).resolves.toMatchObject({ label: 'Travel', balance: '0.00' });
   });
 
   describe('create', () => {
