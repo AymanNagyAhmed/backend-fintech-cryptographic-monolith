@@ -13,12 +13,15 @@ import {
   ApiTags,
   getSchemaPath,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Public } from '../../common/decorators/public.decorator.js';
 import { ResponseMessage } from '../../common/decorators/response-message.decorator.js';
 import {
   ApiFailureResponse,
   ApiOkEnvelope,
 } from '../../common/swagger/decorators/api-envelope.decorator.js';
+import { ThrottleByAccount } from '../../common/throttler/decorators/throttle-by-account.decorator.js';
+import { IP_THROTTLER, RATE_LIMITS } from '../../config/throttler.config.js';
 import { AuthService } from './auth.service.js';
 import type { AuthUser } from './auth.types.js';
 import { CurrentUser } from './decorators/current-user.decorator.js';
@@ -43,6 +46,10 @@ const ref = (model: new () => object) => ({ $ref: getSchemaPath(model) });
   TotpSetupDto,
   TotpEnabledDto,
 )
+@ApiFailureResponse(
+  HttpStatus.TOO_MANY_REQUESTS,
+  'TOO_MANY_REQUESTS (per IP, and per account on login / register); see Retry-After',
+)
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -52,6 +59,8 @@ export class AuthController {
 
   @Public()
   @Post('register')
+  @Throttle({ [IP_THROTTLER]: RATE_LIMITS.register })
+  @ThrottleByAccount()
   @ResponseMessage('User registered')
   @ApiOperation({
     operationId: 'auth.register',
@@ -66,6 +75,8 @@ export class AuthController {
 
   @Public()
   @Post('login')
+  @Throttle({ [IP_THROTTLER]: RATE_LIMITS.login })
+  @ThrottleByAccount()
   @HttpCode(HttpStatus.OK)
   @ResponseMessage('Logged in')
   @ApiOperation({
@@ -84,6 +95,7 @@ export class AuthController {
 
   @Public()
   @Post('refresh')
+  @Throttle({ [IP_THROTTLER]: RATE_LIMITS.refresh })
   @HttpCode(HttpStatus.OK)
   @ResponseMessage('Tokens refreshed')
   @ApiOperation({
@@ -102,6 +114,7 @@ export class AuthController {
 
   @Public()
   @Post('logout')
+  @Throttle({ [IP_THROTTLER]: RATE_LIMITS.logout })
   @HttpCode(HttpStatus.OK)
   @ResponseMessage('Logged out')
   @ApiOperation({
@@ -127,6 +140,7 @@ export class AuthController {
   }
 
   @Post('totp/setup')
+  @Throttle({ [IP_THROTTLER]: RATE_LIMITS.totp })
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ResponseMessage('Scan the QR code, then confirm with a code')
@@ -141,6 +155,7 @@ export class AuthController {
   }
 
   @Post('totp/enable')
+  @Throttle({ [IP_THROTTLER]: RATE_LIMITS.totp })
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ResponseMessage(

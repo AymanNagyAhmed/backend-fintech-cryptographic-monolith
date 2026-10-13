@@ -1,5 +1,6 @@
 import { Controller, Get, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
@@ -77,7 +78,11 @@ describe('TOTP (e2e)', () => {
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
       controllers: [PrivilegedTestController],
-    }).compile();
+    })
+      // Every request comes from 127.0.0.1; limits are covered by rate-limit.e2e-spec.ts
+      .overrideProvider(ThrottlerGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
     app = moduleRef.createNestApplication({ logger: false });
     setupApp(app);
     await app.init();

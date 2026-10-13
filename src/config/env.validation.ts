@@ -3,6 +3,7 @@ import {
   IsIn,
   IsInt,
   IsNotEmpty,
+  IsOptional,
   IsString,
   IsUrl,
   Matches,
@@ -63,6 +64,14 @@ export class EnvironmentVariables {
     message: '$property must be a comma-separated list of http(s) origins',
   })
   CORS_ORIGINS: string;
+
+  // Reverse proxies in front of the app; 0 = use the socket address. Rate limits key on the client IP.
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  TRUST_PROXY: number = 0;
 
   @IsString()
   @MinLength(32)

@@ -7,6 +7,7 @@ import { AppService } from './app.service.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor.js';
 import { createValidationPipe } from './common/pipes/validation.pipe.js';
+import { RateLimitModule } from './common/throttler/rate-limit.module.js';
 import {
   validate,
   type EnvironmentVariables,
@@ -26,6 +27,7 @@ import { UsersModule } from './modules/users/users.module.js';
         loggerParams(config.get('NODE_ENV', { infer: true })),
     }),
     DatabaseModule,
+    RateLimitModule,
     HealthModule,
     UsersModule,
     AuthModule,
