@@ -43,15 +43,13 @@ describe('WalletsService (database)', () => {
     await expect(wallets.findById(wallet.id)).resolves.toEqual(wallet);
   });
 
-  it('allows one wallet per owner and currency', async () => {
+  it('allows several wallets per owner in one currency', async () => {
     const owner = randomUUID();
     await wallets.create(newWallet('AED', owner));
+    await wallets.create(newWallet('AED', owner));
     await wallets.create(newWallet('USD', owner));
-    await expect(wallets.create(newWallet('AED', owner))).rejects.toMatchObject(
-      { code: 'WALLET_EXISTS', statusCode: 409 },
-    );
     const list = await wallets.listByOwner(owner);
-    expect(list.map((w) => w.currency).sort()).toEqual(['AED', 'USD']);
+    expect(list.map((w) => w.currency).sort()).toEqual(['AED', 'AED', 'USD']);
     expect(list.map((w) => w.id)).toEqual(list.map((w) => w.id).sort());
   });
 

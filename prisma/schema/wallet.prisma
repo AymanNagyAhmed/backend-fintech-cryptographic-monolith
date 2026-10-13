@@ -20,8 +20,7 @@ model Wallet {
   createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  // One wallet per owner and currency; also serves the owner's wallet list (cursor on id)
-  @@unique([ownerUserId, currency])
+  // An owner may hold several wallets in one currency; serves the owner's wallet list (cursor on id)
   @@index([ownerUserId, id])
   @@map("wallets")
   @@schema("wallet")
