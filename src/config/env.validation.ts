@@ -31,13 +31,19 @@ export class EnvironmentVariables {
   @Max(65535)
   PORT: number;
 
-  @Matches(/^postgres(ql)?:\/\/.+/, { message: '$property must be a postgresql:// URL' })
+  @Matches(/^postgres(ql)?:\/\/.+/, {
+    message: '$property must be a postgresql:// URL',
+  })
   DATABASE_URL: string;
 
-  @Matches(/^postgres(ql)?:\/\/.+/, { message: '$property must be a postgresql:// URL' })
+  @Matches(/^postgres(ql)?:\/\/.+/, {
+    message: '$property must be a postgresql:// URL',
+  })
   MIGRATOR_DATABASE_URL: string;
 
-  @Matches(/^rediss?:\/\/.+/, { message: '$property must be a redis:// or rediss:// URL' })
+  @Matches(/^rediss?:\/\/.+/, {
+    message: '$property must be a redis:// or rediss:// URL',
+  })
   REDIS_URL: string;
 
   @IsString()
@@ -57,11 +63,15 @@ export class EnvironmentVariables {
   JWT_REFRESH_TTL: string;
 
   // AES-256-GCM key for TOTP secrets at rest: 32 random bytes, base64 (openssl rand -base64 32)
-  @Matches(/^[A-Za-z0-9+/]{43}=$/, { message: '$property must be 32 bytes, base64 (openssl rand -base64 32)' })
+  @Matches(/^[A-Za-z0-9+/]{43}=$/, {
+    message: '$property must be 32 bytes, base64 (openssl rand -base64 32)',
+  })
   TOTP_ENCRYPTION_KEY: string;
 
   // AES-256-GCM key for B2B HMAC secrets at rest (auth.api_clients); separate from the TOTP key
-  @Matches(/^[A-Za-z0-9+/]{43}=$/, { message: '$property must be 32 bytes, base64 (openssl rand -base64 32)' })
+  @Matches(/^[A-Za-z0-9+/]{43}=$/, {
+    message: '$property must be 32 bytes, base64 (openssl rand -base64 32)',
+  })
   API_CLIENT_ENCRYPTION_KEY: string;
 
   @Matches(/^https?:\/\/[^,\s]+(,https?:\/\/[^,\s]+)*$/, {
@@ -76,6 +86,14 @@ export class EnvironmentVariables {
   @Min(0)
   @Max(10)
   TRUST_PROXY: number = 0;
+
+  // Wallets a user may hold that are not closed (POST /wallets answers WALLET_LIMIT_REACHED beyond it)
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  WALLETS_MAX_PER_USER: number = 10;
 
   @IsString()
   @MinLength(32)
@@ -126,12 +144,15 @@ export class EnvironmentVariables {
 }
 
 // Error text names the variable and the rule only; values are never echoed because they may be secrets.
-export function validate(config: Record<string, unknown>): EnvironmentVariables {
+export function validate(
+  config: Record<string, unknown>,
+): EnvironmentVariables {
   const env = plainToInstance(EnvironmentVariables, config);
   const errors = validateSync(env, { skipMissingProperties: false });
   if (errors.length > 0) {
     const lines = errors.map(
-      (e) => `  - ${e.property}: ${Object.values(e.constraints ?? {}).join('; ')}`,
+      (e) =>
+        `  - ${e.property}: ${Object.values(e.constraints ?? {}).join('; ')}`,
     );
     throw new Error(`Invalid environment configuration:\n${lines.join('\n')}`);
   }

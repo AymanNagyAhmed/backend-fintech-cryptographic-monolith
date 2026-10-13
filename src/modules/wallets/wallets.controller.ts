@@ -72,7 +72,7 @@ export class WalletsController {
   @ApiFailureResponse(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED')
   @ApiFailureResponse(
     HttpStatus.UNPROCESSABLE_ENTITY,
-    'UNSUPPORTED_CURRENCY or INVALID_LABEL',
+    'UNSUPPORTED_CURRENCY, INVALID_LABEL, or WALLET_LIMIT_REACHED (WALLETS_MAX_PER_USER wallets that are not closed)',
   )
   @ApiFailureResponse(HttpStatus.TOO_MANY_REQUESTS, 'TOO_MANY_REQUESTS')
   create(

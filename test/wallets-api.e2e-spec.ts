@@ -1,4 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { randomUUID } from 'node:crypto';
@@ -6,6 +7,7 @@ import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import { AppModule } from '../src/app.module.js';
 import { setupApp } from '../src/app.setup.js';
+import type { EnvironmentVariables } from '../src/config/env.validation.js';
 import { PrismaService } from '../src/database/prisma.service.js';
 import { LedgerService } from '../src/modules/ledger/ledger.service.js';
 
@@ -103,6 +105,31 @@ describe('Wallets API (e2e)', () => {
     }).expect(400);
     expect(extra.body.error.code).toBe('VALIDATION_FAILED');
     await createWallet(alice, {}).expect(400);
+  });
+
+  it('POST stops at WALLETS_MAX_PER_USER open wallets, also under 15 parallel requests', async () => {
+    const max = app
+      .get(ConfigService<EnvironmentVariables, true>)
+      .get('WALLETS_MAX_PER_USER', { infer: true });
+    const erin = await newUserToken();
+    const results = await Promise.all(
+      Array.from({ length: max + 5 }, () =>
+        createWallet(erin, { currency: 'USD' }),
+      ),
+    );
+    const statuses = results.map((r) => r.status);
+    expect(statuses.filter((s) => s === 201)).toHaveLength(max);
+    expect(statuses.filter((s) => s === 422)).toHaveLength(5);
+    expect(results.find((r) => r.status === 422)?.body.error.code).toBe(
+      'WALLET_LIMIT_REACHED',
+    );
+
+    const closedId = results.find((r) => r.status === 201)?.body.data
+      .id as string;
+    await prisma.$executeRaw`
+      UPDATE wallet.wallets SET status = 'closed' WHERE id = ${closedId}::uuid`;
+    await createWallet(erin, { currency: 'USD' }).expect(201);
+    await createWallet(erin, { currency: 'USD' }).expect(422);
   });
 
   it('GET /wallets pages through the caller wallets only, by cursor', async () => {
