@@ -22,8 +22,17 @@ export interface AuthUser {
   mfa: boolean;
 }
 
+/** The B2B caller of a @SignedRequest() route, after SignedRequestGuard checked its signature. */
+export interface ApiClientRef {
+  id: string;
+  clientId: string;
+}
+
 export interface AuthenticatedRequest extends Request {
   user?: AuthUser;
+  apiClient?: ApiClientRef;
+  /** Exact request bytes; set because the app is created with `rawBody: true`. */
+  rawBody?: Buffer;
 }
 
 export interface AccessTokenClaims {

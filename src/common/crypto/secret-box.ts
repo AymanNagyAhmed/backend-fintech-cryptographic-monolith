@@ -6,7 +6,7 @@ const TAG_BYTES = 16;
 
 /**
  * AES-256-GCM for small secrets at rest: "v1.<iv>.<tag>.<ciphertext>" (base64url).
- * The AAD binds a ciphertext to its row (the user id), so it cannot be copied to another user.
+ * The AAD binds a ciphertext to its row (user id, client id), so it cannot be copied to another row.
  */
 export class SecretBox {
   private readonly key: Buffer;

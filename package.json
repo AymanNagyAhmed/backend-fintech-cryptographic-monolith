@@ -25,7 +25,9 @@
     "migrate:deploy": "prisma migrate deploy",
     "migrate:status": "prisma migrate status",
     "seed": "prisma db seed",
-    "schema:ownership": "tsx scripts/check-schema-ownership.ts"
+    "schema:ownership": "tsx scripts/check-schema-ownership.ts",
+    "api-client": "tsx scripts/api-client.ts",
+    "sign-request": "tsx scripts/sign-request.ts"
   },
   "dependencies": {
     "@nestjs/bullmq": "12.0.0",
