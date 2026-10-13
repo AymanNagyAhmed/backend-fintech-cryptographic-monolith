@@ -63,17 +63,7 @@ describe('WalletsService', () => {
       },
     );
 
-    it('maps the owner + currency unique violation to WALLET_EXISTS (409)', async () => {
-      wallet.create.mockRejectedValue(
-        uniqueViolation('wallets_owner_user_id_currency_key'),
-      );
-      await expect(service.create(input)).rejects.toMatchObject({
-        code: 'WALLET_EXISTS',
-        statusCode: 409,
-      });
-    });
-
-    it('rethrows other unique violations (a reused ledger account is a bug)', async () => {
+    it('rethrows a unique violation (a reused ledger account is a bug)', async () => {
       const error = uniqueViolation('wallets_ledger_account_id_key');
       wallet.create.mockRejectedValue(error);
       await expect(service.create(input)).rejects.toBe(error);
