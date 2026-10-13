@@ -3,7 +3,13 @@ import { isCurrency, type Currency } from '../../common/money/currency.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { Prisma, type Wallet } from '../../generated/prisma/client.js';
 import { UnsupportedCurrencyException } from '../../common/money/exceptions/unsupported-currency.exception.js';
-import { walletClosed, walletNotFound } from './exceptions/wallet.exceptions.js';
+import { LedgerService } from '../ledger/ledger.service.js';
+import type { WalletPageDto } from './dto/wallet-page.dto.js';
+import type { WalletDto } from './dto/wallet.dto.js';
+import {
+  walletClosed,
+  walletNotFound,
+} from './exceptions/wallet.exceptions.js';
 import { normalizeWalletLabel } from './wallet-label.js';
 
 export type WalletView = Omit<Wallet, 'currency'> & { currency: Currency };
@@ -24,9 +30,99 @@ const toView = (wallet: Wallet) => wallet as WalletView;
 const normalizeOptionalLabel = (label: string | null | undefined) =>
   label == null ? null : normalizeWalletLabel(label);
 
+export interface OpenWalletInput {
+  currency: string;
+  label?: string | null;
+}
+
+export interface WalletPageQuery {
+  /** Id of the last wallet of the previous page */
+  cursor?: string;
+  limit: number;
+}
+
+const toDto = (wallet: WalletView, balance: string): WalletDto => ({
+  id: wallet.id,
+  currency: wallet.currency,
+  label: wallet.label,
+  status: wallet.status,
+  balance,
+  createdAt: wallet.createdAt.toISOString(),
+  updatedAt: wallet.updatedAt.toISOString(),
+});
+
 @Injectable()
 export class WalletsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ledger: LedgerService,
+  ) {}
+
+  /** Opens the ledger account and the wallet in one transaction (POST /wallets). */
+  async open(ownerUserId: string, input: OpenWalletInput): Promise<WalletDto> {
+    if (!isCurrency(input.currency))
+      throw new UnsupportedCurrencyException(input.currency);
+    const label = normalizeOptionalLabel(input.label);
+    const currency = input.currency;
+    const wallet = await this.prisma.withTx(async (tx) => {
+      const account = await this.ledger.openWalletAccount(currency, tx);
+      return this.create(
+        { ownerUserId, currency, ledgerAccountId: account.id, label },
+        tx,
+      );
+    });
+    return (await this.withBalances([wallet]))[0];
+  }
+
+  /** One owned wallet with its balance; WALLET_NOT_FOUND (404) otherwise. */
+  async getOwned(id: string, ownerUserId: string): Promise<WalletDto> {
+    const wallet = await this.findOwned(id, ownerUserId);
+    if (!wallet) throw walletNotFound();
+    return (await this.withBalances([wallet]))[0];
+  }
+
+  /** The owner's wallets in id order (UUID v7 = creation order), `limit` per page. */
+  async listPage(
+    ownerUserId: string,
+    query: WalletPageQuery,
+  ): Promise<WalletPageDto> {
+    const rows = await this.prisma.wallet.findMany({
+      where: {
+        ownerUserId,
+        ...(query.cursor ? { id: { gt: query.cursor } } : {}),
+      },
+      orderBy: { id: 'asc' },
+      take: query.limit + 1,
+    });
+    const page = rows.slice(0, query.limit).map(toView);
+    return {
+      items: await this.withBalances(page),
+      nextCursor: rows.length > query.limit ? page[page.length - 1].id : null,
+    };
+  }
+
+  /** Renames an owned wallet and returns it with its balance (PATCH /wallets/:id). */
+  async renameOwned(
+    id: string,
+    ownerUserId: string,
+    label: string | null,
+  ): Promise<WalletDto> {
+    const wallet = await this.rename(id, ownerUserId, label);
+    return (await this.withBalances([wallet]))[0];
+  }
+
+  private async withBalances(wallets: WalletView[]): Promise<WalletDto[]> {
+    const balances = await this.ledger.getBalances(
+      wallets.map((w) => w.ledgerAccountId),
+    );
+    return wallets.map((w) => {
+      const balance = balances.get(w.ledgerAccountId);
+      // Every wallet is created together with its account (open), so this is a data bug
+      if (balance === undefined)
+        throw new Error(`Ledger account of wallet ${w.id} not found`);
+      return toDto(w, balance);
+    });
+  }
 
   /**
    * Creates the wallet row only. The caller creates the ledger account and passes `tx`,

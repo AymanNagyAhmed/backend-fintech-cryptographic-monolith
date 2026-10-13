@@ -47,7 +47,7 @@ export interface PostingResult {
 const UNIQUE_VIOLATION = 'P2002';
 
 export interface SystemAccountInput {
-  /** Stable name, e.g. "external_clearing:AED" (CHECK accounts_code_chk) */
+  /** Stable name, e.g. "external_clearing:aed" (CHECK accounts_code_chk) */
   code: string;
   currency: string;
   /** Counter side of deposits / opening balances goes below zero */
@@ -197,5 +197,26 @@ export class LedgerService {
   async findById(id: string): Promise<AccountView | null> {
     const account = await this.prisma.account.findUnique({ where: { id } });
     return account && toView(account);
+  }
+
+  /**
+   * Cached balances by account id, read without locks (for display; `post` re-reads under
+   * the lock). Formatted at the currency scale, e.g. "12.50" AED, "0.00000001" BTC.
+   * Unknown ids are missing from the map.
+   */
+  async getBalances(
+    accountIds: readonly string[],
+  ): Promise<Map<string, string>> {
+    if (accountIds.length === 0) return new Map();
+    const accounts = await this.prisma.account.findMany({
+      where: { id: { in: [...new Set(accountIds)] } },
+      select: { id: true, balance: true, currency: true },
+    });
+    return new Map(
+      accounts.map((a) => {
+        assertCurrency(a.currency);
+        return [a.id, Money.of(a.balance.toFixed(), a.currency).toString()];
+      }),
+    );
   }
 }
