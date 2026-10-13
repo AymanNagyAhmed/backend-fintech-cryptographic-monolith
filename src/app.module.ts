@@ -15,6 +15,7 @@ import {
 import { loggerParams } from './config/logger.config.js';
 import { DatabaseModule } from './database/database.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
+import { B2bModule } from './modules/b2b/b2b.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 
@@ -31,6 +32,7 @@ import { UsersModule } from './modules/users/users.module.js';
     HealthModule,
     UsersModule,
     AuthModule,
+    B2bModule,
   ],
   controllers: [AppController],
   providers: [

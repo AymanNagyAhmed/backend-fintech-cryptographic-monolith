@@ -75,3 +75,30 @@ model TotpCredential {
   @@map("totp_credentials")
   @@schema("auth")
 }
+
+enum ApiSigningAlgorithm {
+  hmac_sha256
+  ed25519
+
+  @@map("api_signing_algorithm")
+  @@schema("auth")
+}
+
+// B2B callers that sign requests (A-B4.5): method + path + timestamp + nonce + sha256(body).
+// hmac_sha256: shared secret sealed with AES-256-GCM (API_CLIENT_ENCRYPTION_KEY, client_id as AAD).
+// ed25519: only the raw 32-byte public key (base64url, the JWK "x"); the client keeps the private key.
+// Identity and key are fixed once created (new key = new client); revoked_at can be set once.
+model ApiClient {
+  id        String              @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  clientId  String              @unique @map("client_id") @db.VarChar(63)
+  name      String              @db.VarChar(200)
+  algorithm ApiSigningAlgorithm
+  secretEnc String?             @map("secret_enc")
+  publicKey String?             @map("public_key") @db.VarChar(43)
+  revokedAt DateTime?           @map("revoked_at") @db.Timestamptz(6)
+  createdAt DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("api_clients")
+  @@schema("auth")
+}

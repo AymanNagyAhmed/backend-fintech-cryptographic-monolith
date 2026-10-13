@@ -60,6 +60,10 @@ export class EnvironmentVariables {
   @Matches(/^[A-Za-z0-9+/]{43}=$/, { message: '$property must be 32 bytes, base64 (openssl rand -base64 32)' })
   TOTP_ENCRYPTION_KEY: string;
 
+  // AES-256-GCM key for B2B HMAC secrets at rest (auth.api_clients); separate from the TOTP key
+  @Matches(/^[A-Za-z0-9+/]{43}=$/, { message: '$property must be 32 bytes, base64 (openssl rand -base64 32)' })
+  API_CLIENT_ENCRYPTION_KEY: string;
+
   @Matches(/^https?:\/\/[^,\s]+(,https?:\/\/[^,\s]+)*$/, {
     message: '$property must be a comma-separated list of http(s) origins',
   })

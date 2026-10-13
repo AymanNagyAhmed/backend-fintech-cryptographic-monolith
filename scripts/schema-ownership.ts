@@ -8,6 +8,7 @@ export const OWNERSHIP: Readonly<Record<string, readonly string[]>> = {
   health: [],
   auth: ['auth'],
   users: ['auth'],
+  b2b: [],
   wallets: ['wallet'],
   ledger: ['ledger'],
   transfers: ['ledger'],

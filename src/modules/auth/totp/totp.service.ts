@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { DomainException } from '../../../common/exceptions/domain.exception.js';
 import type { EnvironmentVariables } from '../../../config/env.validation.js';
 import { PrismaService } from '../../../database/prisma.service.js';
-import { SecretBox } from './secret-box.js';
+import { SecretBox } from '../../../common/crypto/secret-box.js';
 import {
   base32Encode,
   matchTotpStep,

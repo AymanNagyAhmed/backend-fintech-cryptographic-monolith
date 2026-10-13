@@ -13,6 +13,7 @@ const validEnv = (): Record<string, string> => ({
   JWT_ACCESS_TTL: '15m',
   JWT_REFRESH_TTL: '7d',
   TOTP_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),
+  API_CLIENT_ENCRYPTION_KEY: Buffer.alloc(32, 8).toString('base64'),
   CORS_ORIGINS: 'http://localhost:5173,http://localhost:8080',
   WEBHOOK_SECRET_STRIPE: secret,
   BAO_ADDR: 'http://localhost:8200',
@@ -35,7 +36,7 @@ describe('env validation', () => {
     expect(env.CHECKPOINT_INTERVAL_SEC).toBe(60);
   });
 
-  it.each(['JWT_ACCESS_SECRET', 'DATABASE_URL', 'BAO_TOKEN', 'WEBHOOK_SECRET_STRIPE', 'TOTP_ENCRYPTION_KEY'])(
+  it.each(['JWT_ACCESS_SECRET', 'DATABASE_URL', 'BAO_TOKEN', 'WEBHOOK_SECRET_STRIPE', 'TOTP_ENCRYPTION_KEY', 'API_CLIENT_ENCRYPTION_KEY'])(
     'refuses to start when %s is missing',
     (key) => {
       const env = validEnv();

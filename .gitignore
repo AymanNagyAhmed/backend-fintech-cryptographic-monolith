@@ -8,6 +8,8 @@ coverage/
 .env
 .env.*
 !.env.example
+# B2B Ed25519 keys made by `npm run api-client -- create ... --generate-key`
+*.pem
 
 # Generated Prisma client (A-B3)
 src/generated/
