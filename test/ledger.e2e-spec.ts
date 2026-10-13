@@ -30,18 +30,23 @@ describe('Ledger schema (database)', () => {
       await client.query('ROLLBACK');
     }
   };
-  const insertEntry = (
+  const insertEntry = async (
     client: pg.Client,
     accountId: string,
     amount: string,
     currency: string,
     entryRef: string,
-  ) =>
-    client.query(
+  ) => {
+    await client.query(
+      `INSERT INTO ledger.postings (ref) VALUES ($1) ON CONFLICT DO NOTHING`,
+      [entryRef],
+    );
+    return client.query(
       `INSERT INTO ledger.ledger_entries (account_id, amount, currency, ref)
        VALUES ($1, $2, $3, $4)`,
       [accountId, amount, currency, entryRef],
     );
+  };
   const clearing = (currency = 'AED') =>
     ledger.ensureSystemAccount({ code: code(), currency, allowNegative: true });
 
@@ -243,7 +248,13 @@ describe('Ledger schema (database)', () => {
 
     it.each([
       ['a zero amount', '0', 'ok-ref', /ledger_entries_amount_non_zero_chk/],
-      ['a ref with spaces', '1', 'has space', /ledger_entries_ref_chk/],
+      // postings_ref_chk fires first (the posting row is inserted before its entries)
+      [
+        'a ref with spaces',
+        '1',
+        'has space',
+        /(postings|ledger_entries)_ref_chk/,
+      ],
     ])('the database rejects %s', async (_, amount, entryRef, constraint) => {
       const account = await clearing();
       await expect(
