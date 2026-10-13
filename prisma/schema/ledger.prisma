@@ -38,6 +38,18 @@ model Account {
   @@schema("ledger")
 }
 
+// One row per posting (journal entry); the primary key makes a ref postable once, also under
+// concurrency. Append-only like the entries.
+model Posting {
+  ref       String   @id @db.VarChar(128)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  entries LedgerEntry[]
+
+  @@map("postings")
+  @@schema("ledger")
+}
+
 // Immutable debit (negative) / credit (positive) rows; corrections are new reversing entries.
 // All entries with one ref form a posting: same currency, amounts sum to 0 (checked at commit).
 // currency repeats the account's currency (trigger) so a posting is checkable without a join.
@@ -52,6 +64,7 @@ model LedgerEntry {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   account Account @relation(fields: [accountId], references: [id])
+  posting Posting @relation(fields: [ref], references: [ref])
 
   @@index([accountId, seq])
   @@index([ref])
