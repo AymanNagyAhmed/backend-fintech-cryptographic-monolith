@@ -69,4 +69,10 @@ describe('env validation', () => {
     expect(msg).toContain('- SIGNING_ALG:');
     expect(msg).toContain('- PORT:');
   });
+
+  it('defaults TRUST_PROXY to 0 and accepts a hop count', () => {
+    expect(validate(validEnv()).TRUST_PROXY).toBe(0);
+    expect(validate({ ...validEnv(), TRUST_PROXY: '1' }).TRUST_PROXY).toBe(1);
+    expect(messageOf({ ...validEnv(), TRUST_PROXY: 'true' })).toContain('- TRUST_PROXY:');
+  });
 });

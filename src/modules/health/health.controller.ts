@@ -13,6 +13,7 @@ import {
   type HealthIndicatorFunction,
 } from '@nestjs/terminus';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { Public } from '../../common/decorators/public.decorator.js';
 import { ResponseMessage } from '../../common/decorators/response-message.decorator.js';
 import { DomainException } from '../../common/exceptions/domain.exception.js';
@@ -40,6 +41,8 @@ const HEALTH_RESULT = {
 };
 
 @ApiTags('health')
+// Probes and load balancers poll often from one IP
+@SkipThrottle()
 @Public()
 @Controller('health')
 export class HealthController {
