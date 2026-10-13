@@ -10,12 +10,15 @@ enum WalletStatus {
 // User-facing wallet. The balance lives in ledger.accounts (source of truth: ledger.ledger_entries).
 // ownerUserId (auth.users.id) and ledgerAccountId (ledger.accounts.id) are plain UUIDs, no FK
 // across schemas. currency is checked against the supported list in the migration.
-// Owner, currency and ledger account are fixed once created; closed is final (trigger).
+// Owner, currency and ledger account are fixed once created; closed is final and a closed
+// wallet keeps its label (trigger). label is user-written text (CHECK: trimmed, no control
+// characters), not unique per owner; it never goes into hashed audit payloads.
 model Wallet {
   id              String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
   ownerUserId     String       @map("owner_user_id") @db.Uuid
   currency        String       @db.VarChar(10)
   ledgerAccountId String       @unique @map("ledger_account_id") @db.Uuid
+  label           String?      @db.VarChar(50)
   status          WalletStatus @default(active)
   createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
