@@ -18,6 +18,7 @@ import { AuthModule } from './modules/auth/auth.module.js';
 import { B2bModule } from './modules/b2b/b2b.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { UsersModule } from './modules/users/users.module.js';
+import { WalletsModule } from './modules/wallets/wallets.module.js';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { UsersModule } from './modules/users/users.module.js';
     UsersModule,
     AuthModule,
     B2bModule,
+    WalletsModule,
   ],
   controllers: [AppController],
   providers: [
