@@ -32,7 +32,9 @@ model Account {
   createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  entries LedgerEntry[]
+  entries       LedgerEntry[]
+  transfersFrom Transfer[]    @relation("TransferFrom")
+  transfersTo   Transfer[]    @relation("TransferTo")
 
   @@map("accounts")
   @@schema("ledger")
@@ -44,7 +46,8 @@ model Posting {
   ref       String   @id @db.VarChar(128)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  entries LedgerEntry[]
+  entries  LedgerEntry[]
+  transfer Transfer?
 
   @@map("postings")
   @@schema("ledger")
@@ -69,5 +72,55 @@ model LedgerEntry {
   @@index([accountId, seq])
   @@index([ref])
   @@map("ledger_entries")
+  @@schema("ledger")
+}
+
+// One row per (scope, key): claimed with INSERT ... ON CONFLICT DO NOTHING in the same
+// transaction as the money movement, so a retry can never run the work twice (2.10, 2.17).
+// scope names the source and, for client keys, the caller (e.g. "transfer:<userId>"), so two
+// users' keys or a client key and a provider event id never collide. requestHash is the SHA-256
+// hex of the canonical request: same key + different request = reject. statusCode and response
+// are written once, in the claiming transaction, and replayed on every retry (trigger).
+// Purged after 30 days; the money movement itself stays in ledger_entries.
+model IdempotencyKey {
+  id          String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  scope       String   @db.VarChar(100)
+  key         String   @db.VarChar(255)
+  requestHash String   @map("request_hash") @db.Char(64)
+  statusCode  Int?     @map("status_code") @db.SmallInt
+  response    Json?    @db.JsonB
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([scope, key])
+  @@index([createdAt])
+  @@map("idempotency_keys")
+  @@schema("ledger")
+}
+
+// One wallet-to-wallet transfer, written in the transaction of its posting (ref). The posting
+// moves exactly amount from fromAccountId to toAccountId (checked at commit). Wallet and user
+// ids are plain UUIDs (wallet.wallets.id, auth.users.id), no FK across schemas. Append-only:
+// a correction is a new transfer.
+model Transfer {
+  id              String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  ref             String   @unique @db.VarChar(128)
+  fromAccountId   String   @map("from_account_id") @db.Uuid
+  toAccountId     String   @map("to_account_id") @db.Uuid
+  fromWalletId    String   @map("from_wallet_id") @db.Uuid
+  toWalletId      String   @map("to_wallet_id") @db.Uuid
+  amount          Decimal  @db.Decimal(20, 8)
+  currency        String   @db.VarChar(10)
+  initiatorUserId String   @map("initiator_user_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  posting     Posting @relation(fields: [ref], references: [ref])
+  fromAccount Account @relation("TransferFrom", fields: [fromAccountId], references: [id])
+  toAccount   Account @relation("TransferTo", fields: [toAccountId], references: [id])
+
+  // Daily limits (sum of today's outgoing amount per account) and per-user transfer lists
+  @@index([fromAccountId, createdAt])
+  @@index([toAccountId])
+  @@index([initiatorUserId, id])
+  @@map("transfers")
   @@schema("ledger")
 }
