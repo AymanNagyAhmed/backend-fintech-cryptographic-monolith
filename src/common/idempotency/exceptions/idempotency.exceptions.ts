@@ -4,6 +4,8 @@ import { DomainException } from '../../exceptions/domain.exception.js';
 // Error codes of idempotent operations; clients branch on error.code
 
 export const IDEMPOTENCY_KEY_HEADER = 'Idempotency-Key';
+/** Set on a response that replays the stored result of an earlier request with the same key. */
+export const IDEMPOTENT_REPLAYED_HEADER = 'Idempotent-Replayed';
 
 export const invalidIdempotencyKey = () =>
   new DomainException(

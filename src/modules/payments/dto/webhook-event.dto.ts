@@ -6,13 +6,15 @@ import { IsObject, Matches } from 'class-validator';
  * PaymentsService.parseEvent (unknown fields allowed), not by the global ValidationPipe.
  */
 export class WebhookEventDto {
+  // At most 100 characters: the ledger ref `webhook:<provider>:<id>` has 128
   @ApiProperty({
     example: 'evt_3PqR8s2eZvKYlo2C',
     description: 'Provider event id; a redelivery carries the same id',
-    pattern: '^[A-Za-z0-9_.:-]{1,255}$',
+    pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}$',
   })
-  @Matches(/^[A-Za-z0-9_.:-]{1,255}$/, {
-    message: '$property must be 1-255 characters of A-Z a-z 0-9 _ . : -',
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}$/, {
+    message:
+      '$property must be 1-100 characters of A-Z a-z 0-9 _ . : -, starting with a letter or digit',
   })
   id: string;
 

@@ -1845,12 +1845,17 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "// A provider redelivers an event it thinks failed: the same signed request answers 200 again. (2.17)",
+                  "// A provider redelivers an event it thinks failed: the same signed request answers 200 with the",
+                  "// stored receipt and Idempotent-Replayed: true, and the wallet is credited once. (2.17)",
                   "if (pm.response.code === 200) {",
                   "  const first = pm.response.json().data;",
                   "  pm.test('webhooks.receive: receipt names the event', () =>",
                   "    pm.expect(first.eventId).to.eql(pm.environment.get('webhookEventId')),",
                   "  );",
+                  "  pm.test('webhooks.receive: payment.succeeded credits the wallet', () => {",
+                  "    pm.expect(first.status).to.eql('credited');",
+                  "    pm.expect(first.deposit.walletId).to.eql(pm.environment.get('walletId'));",
+                  "  });",
                   "  pm.sendRequest(",
                   "    {",
                   "      url: pm.request.url.toString(),",
@@ -1859,9 +1864,10 @@
                   "      body: { mode: 'raw', raw: pm.request.body.raw },",
                   "    },",
                   "    (err, res) => {",
-                  "      pm.test('webhooks.receive: redelivery answers 200 with the same receipt', () => {",
+                  "      pm.test('webhooks.receive: redelivery replays the same receipt', () => {",
                   "        pm.expect(err).to.eql(null);",
                   "        pm.expect(res.code).to.eql(200);",
+                  "        pm.expect(res.headers.get('Idempotent-Replayed')).to.eql('true');",
                   "        pm.expect(res.json().data).to.eql(first);",
                   "      });",
                   "    },",
@@ -1928,7 +1934,7 @@
           "response": [
             {
               "_postman_previewlanguage": "json",
-              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"OK\",\n  \"meta\": {\n    \"requestId\": \"req_6ce0eecd9fd7a31fdae9f47b\"\n  },\n  \"data\": {\n    \"provider\": \"stripe\",\n    \"eventId\": \"evt_3PqR8s2eZvKYlo2C\",\n    \"type\": \"payment.succeeded\",\n    \"status\": \"received\"\n  }\n}",
+              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"OK\",\n  \"meta\": {\n    \"requestId\": \"req_6ce0eecd9fd7a31fdae9f47b\"\n  },\n  \"data\": {\n    \"provider\": \"stripe\",\n    \"eventId\": \"evt_3PqR8s2eZvKYlo2C\",\n    \"type\": \"payment.succeeded\",\n    \"status\": \"credited\",\n    \"deposit\": {\n      \"walletId\": \"019a1b2c-3d4e-7f60-8a9b-0c1d2e3f4a70\",\n      \"amount\": \"250.00\",\n      \"currency\": \"AED\"\n    },\n    \"reason\": {\n      \"code\": \"ACCOUNT_FROZEN\",\n      \"message\": \"The wallet is frozen.\"\n    }\n  }\n}",
               "code": 200,
               "header": [
                 {
@@ -1965,6 +1971,32 @@
               "id": "edae9227-f243-55a0-a953-212b2f84ed5b",
               "name": "WEBHOOK_PROVIDER_NOT_FOUND",
               "status": "Not Found"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "4d25c155-ddc4-5892-af44-ad9e5cb7819b",
+              "name": "IDEMPOTENCY_KEY_REUSED (same event id, other body)",
+              "status": "Unprocessable Entity (WebDAV) (RFC 4918)"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 503,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "fc8d8fc8-0391-57b8-aef9-67d19dca09a8",
+              "name": "DEPOSITS_UNAVAILABLE (the provider's clearing account is not active; retry later)",
+              "status": "Service Unavailable"
             }
           ]
         }

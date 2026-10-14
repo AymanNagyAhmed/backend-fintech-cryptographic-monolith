@@ -34,6 +34,16 @@ export const invalidWebhookSignature = () =>
     HttpStatus.BAD_REQUEST,
   );
 
+/** The provider's clearing account is not active: 503, so the provider retries later. */
+export const depositsUnavailable = () =>
+  new DomainException(
+    'DEPOSITS_UNAVAILABLE',
+    'Deposits from this provider are paused. Please retry later.',
+    HttpStatus.SERVICE_UNAVAILABLE,
+    undefined,
+    true,
+  );
+
 export const invalidWebhookEvent = (details: ApiErrorDetail[]) =>
   new DomainException(
     'INVALID_WEBHOOK_EVENT',

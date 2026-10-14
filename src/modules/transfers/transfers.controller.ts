@@ -16,7 +16,10 @@ import {
 } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { ResponseMessage } from '../../common/decorators/response-message.decorator.js';
-import { IDEMPOTENCY_KEY_HEADER } from '../../common/idempotency/exceptions/idempotency.exceptions.js';
+import {
+  IDEMPOTENCY_KEY_HEADER,
+  IDEMPOTENT_REPLAYED_HEADER,
+} from '../../common/idempotency/exceptions/idempotency.exceptions.js';
 import { assertIdempotencyKey } from '../../common/idempotency/idempotency-key.js';
 import {
   ApiFailureResponse,
@@ -27,9 +30,6 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import { CreateTransferDto } from './dto/create-transfer.dto.js';
 import { TransferDto } from './dto/transfer.dto.js';
 import { TransfersService } from './transfers.service.js';
-
-/** Set on a response that replays the stored result of an earlier request with the same key. */
-export const IDEMPOTENT_REPLAYED_HEADER = 'Idempotent-Replayed';
 
 @ApiTags('Transfers')
 @ApiBearerAuth()
