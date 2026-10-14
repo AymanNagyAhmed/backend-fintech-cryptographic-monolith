@@ -22,6 +22,7 @@ import { UsersModule } from './modules/users/users.module.js';
 import { WalletsModule } from './modules/wallets/wallets.module.js';
 import { LedgerJobsModule } from './modules/ledger/jobs/ledger-jobs.module.js';
 import { LedgerModule } from './modules/ledger/ledger.module.js';
+import { TransfersModule } from './modules/transfers/transfers.module.js';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { LedgerModule } from './modules/ledger/ledger.module.js';
     WalletsModule,
     LedgerModule,
     LedgerJobsModule,
+    TransfersModule,
   ],
   controllers: [AppController],
   providers: [

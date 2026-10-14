@@ -35,7 +35,11 @@ if (body && status < 400) {
     pm.expect(body.success).to.eql(false);
     pm.expect(body.error.code).to.match(/^[A-Z][A-Z0-9_]*$/);
   });
+  // A request's pre-request script may announce the failure it expects (expectedErrorCode)
+  const expected = pm.variables.get('expectedErrorCode');
   pm.test(`${operationId}: answered ${status} ${body.error.code}`, () =>
-    pm.expect(tolerated[operationId] || []).to.include(body.error.code),
+    pm.expect([...(tolerated[operationId] || []), ...(expected ? [expected] : [])]).to.include(
+      body.error.code,
+    ),
   );
 }
