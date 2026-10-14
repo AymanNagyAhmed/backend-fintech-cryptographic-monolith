@@ -204,14 +204,21 @@ export class WalletsService {
     throw owned ? walletClosed() : walletNotFound();
   }
 
-  async findById(id: string): Promise<WalletView | null> {
-    const wallet = await this.prisma.wallet.findUnique({ where: { id } });
+  async findById(
+    id: string,
+    tx: Prisma.TransactionClient = this.prisma,
+  ): Promise<WalletView | null> {
+    const wallet = await tx.wallet.findUnique({ where: { id } });
     return wallet && toView(wallet);
   }
 
   /** The wallet only when `ownerUserId` owns it, so callers answer 404 for other users' wallets. */
-  async findOwned(id: string, ownerUserId: string): Promise<WalletView | null> {
-    const wallet = await this.prisma.wallet.findFirst({
+  async findOwned(
+    id: string,
+    ownerUserId: string,
+    tx: Prisma.TransactionClient = this.prisma,
+  ): Promise<WalletView | null> {
+    const wallet = await tx.wallet.findFirst({
       where: { id, ownerUserId },
     });
     return wallet && toView(wallet);

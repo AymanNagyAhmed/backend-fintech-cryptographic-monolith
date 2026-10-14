@@ -63,6 +63,17 @@ const BODIES: Record<string, object> = {
   'auth.logout': { refreshToken: '{{refreshToken}}' },
   'auth.totpEnable': { code: '{{totpCode}}' },
   'wallets.create': { currency: '{{currency}}', label: 'Savings' },
+  'transfers.create': {
+    fromWalletId: '{{walletId}}',
+    toWalletId: '{{counterpartyWalletId}}',
+    amount: '{{amount}}',
+    currency: '{{currency}}',
+  },
+};
+
+/** Header values taken from the environment (set by the collection pre-request script). */
+const HEADER_VALUES: Record<string, string> = {
+  'idempotency-key': '{{idempotencyKey}}',
 };
 
 /** Path variables by context (operationId prefix). */
@@ -165,9 +176,12 @@ function rewriteRequest(item: Item, op: Operation & { operationId: string }) {
         }
       : {}),
   };
-  req.header = ((req.header ?? []) as Item[]).filter(
-    (h) => !SIGNED_HEADERS.includes(String(h.key).toLowerCase()),
-  );
+  req.header = ((req.header ?? []) as Item[])
+    .filter((h) => !SIGNED_HEADERS.includes(String(h.key).toLowerCase()))
+    .map((h) => {
+      const value = HEADER_VALUES[String(h.key).toLowerCase()];
+      return value ? { ...h, value } : h;
+    });
   const body = BODIES[op.operationId];
   if (body && req.body?.mode === 'raw')
     req.body.raw = JSON.stringify(body, null, 2);

@@ -11,6 +11,19 @@
   },
   "event": [
     {
+      "listen": "prerequest",
+      "script": {
+        "exec": [
+          "// A new Idempotency-Key per request; keepIdempotencyKey = true sends the previous key again",
+          "// (manual replay tests: same key + same body returns the stored response). (2.17)",
+          "if (pm.environment.get('keepIdempotencyKey') !== 'true' || !pm.environment.get('idempotencyKey')) {",
+          "  pm.environment.set('idempotencyKey', pm.variables.replaceIn('{{$guid}}'));",
+          "}"
+        ],
+        "type": "text/javascript"
+      }
+    },
+    {
       "listen": "test",
       "script": {
         "exec": [
@@ -51,8 +64,12 @@
           "    pm.expect(body.success).to.eql(false);",
           "    pm.expect(body.error.code).to.match(/^[A-Z][A-Z0-9_]*$/);",
           "  });",
+          "  // A request's pre-request script may announce the failure it expects (expectedErrorCode)",
+          "  const expected = pm.variables.get('expectedErrorCode');",
           "  pm.test(`${operationId}: answered ${status} ${body.error.code}`, () =>",
-          "    pm.expect(tolerated[operationId] || []).to.include(body.error.code),",
+          "    pm.expect([...(tolerated[operationId] || []), ...(expected ? [expected] : [])]).to.include(",
+          "      body.error.code,",
+          "    ),",
           "  );",
           "}"
         ],
@@ -1550,6 +1567,230 @@
         }
       ],
       "name": "Wallets"
+    },
+    {
+      "event": [],
+      "id": "d800d4c4-7bf5-50a6-a70e-f98d5a9d6f88",
+      "item": [
+        {
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('operationId', 'transfers.create');",
+                  "// Source: the caller's wallet in {{currency}} with the highest balance (a seeded user has funded",
+                  "// wallets); a new user only has the empty {{walletId}}, so the transfer must answer",
+                  "// INSUFFICIENT_FUNDS. Target: another wallet in {{currency}}, created when there is none.",
+                  "// Balances are compared as integers of 1e-8 units, never as floats.",
+                  "const baseUrl = pm.environment.get('baseUrl');",
+                  "const currency = pm.environment.get('currency');",
+                  "const auth = { key: 'Authorization', value: `Bearer ${pm.environment.get('accessToken')}` };",
+                  "const units = (s) => {",
+                  "  const [int, frac = ''] = String(s).split('.');",
+                  "  return BigInt(int + frac.padEnd(8, '0').slice(0, 8));",
+                  "};",
+                  "const needed = units(pm.environment.get('amount'));",
+                  "",
+                  "pm.sendRequest({ url: `${baseUrl}/wallets?limit=100`, method: 'GET', header: [auth] }, (err, res) => {",
+                  "  if (err) throw err;",
+                  "  const wallets = res.json().data.items.filter((w) => w.currency === currency && w.status === 'active');",
+                  "  const richest = wallets.reduce((a, b) => (!a || units(b.balance) > units(a.balance) ? b : a), null);",
+                  "  const funded = richest && units(richest.balance) >= needed;",
+                  "  const source = funded ? richest : wallets.find((w) => w.id === pm.environment.get('walletId'));",
+                  "  if (!source) throw new Error(`transfers.create: no ${currency} wallet; run wallets.create first`);",
+                  "  pm.variables.set('walletId', source.id); // this request only; the environment keeps its walletId",
+                  "  pm.variables.set('expectedErrorCode', funded ? '' : 'INSUFFICIENT_FUNDS');",
+                  "",
+                  "  const target = wallets.find((w) => w.id !== source.id);",
+                  "  if (target) return pm.environment.set('counterpartyWalletId', target.id);",
+                  "  pm.sendRequest(",
+                  "    {",
+                  "      url: `${baseUrl}/wallets`,",
+                  "      method: 'POST',",
+                  "      header: [auth, { key: 'Content-Type', value: 'application/json' }],",
+                  "      body: { mode: 'raw', raw: JSON.stringify({ currency, label: 'Counterparty' }) },",
+                  "    },",
+                  "    (e, created) => {",
+                  "      if (e) throw e;",
+                  "      pm.environment.set('counterpartyWalletId', created.json().data.id);",
+                  "    },",
+                  "  );",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// 201: store transferId, then send the same body with the same Idempotency-Key again: it must",
+                  "// replay the stored transfer (Idempotent-Replayed: true) instead of moving money twice. (2.17)",
+                  "const expected = pm.variables.get('expectedErrorCode');",
+                  "if (expected) {",
+                  "  pm.test(`transfers.create: ${expected} for a wallet without funds`, () =>",
+                  "    pm.expect(pm.response.json().error.code).to.eql(expected),",
+                  "  );",
+                  "} else {",
+                  "  pm.test('transfers.create: 201 Created', () => pm.expect(pm.response.code).to.eql(201));",
+                  "}",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "  const transfer = pm.response.json().data;",
+                  "  pm.environment.set('transferId', transfer.id);",
+                  "  pm.test('transfers.create: first request is not a replay', () =>",
+                  "    pm.expect(pm.response.headers.has('Idempotent-Replayed')).to.eql(false),",
+                  "  );",
+                  "  pm.sendRequest(",
+                  "    {",
+                  "      url: `${pm.environment.get('baseUrl')}/transfers`,",
+                  "      method: 'POST',",
+                  "      header: [",
+                  "        { key: 'Authorization', value: `Bearer ${pm.environment.get('accessToken')}` },",
+                  "        { key: 'Content-Type', value: 'application/json' },",
+                  "        { key: 'Idempotency-Key', value: pm.environment.get('idempotencyKey') },",
+                  "      ],",
+                  "      body: { mode: 'raw', raw: pm.variables.replaceIn(pm.request.body.raw) },",
+                  "    },",
+                  "    (err, replay) => {",
+                  "      pm.test('transfers.create: same Idempotency-Key replays the same transfer', () => {",
+                  "        pm.expect(err).to.eql(null);",
+                  "        pm.expect(replay.code).to.eql(201);",
+                  "        pm.expect(replay.headers.get('Idempotent-Replayed')).to.eql('true');",
+                  "        pm.expect(replay.json().data).to.eql(transfer);",
+                  "      });",
+                  "    },",
+                  "  );",
+                  "}",
+                  "",
+                  "// Set by the pre-request script for this request only; local variables live for the whole run",
+                  "pm.variables.unset('walletId');",
+                  "pm.variables.unset('expectedErrorCode');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "abf67e17-c04c-547e-a7cd-566a8f96aad4",
+          "name": "Move money from one of the caller's wallets to another wallet (idempotent)",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"fromWalletId\": \"{{walletId}}\",\n  \"toWalletId\": \"{{counterpartyWalletId}}\",\n  \"amount\": \"{{amount}}\",\n  \"currency\": \"{{currency}}\"\n}"
+            },
+            "description": "Move money from one of the caller's wallets to another wallet (idempotent)",
+            "header": [
+              {
+                "description": {
+                  "content": "(Required) A new UUID per transfer, reused on every retry of it. Same key + same body replays the first response (header Idempotent-Replayed: true); same key + other body = 422.",
+                  "type": "text/plain"
+                },
+                "disabled": false,
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "name": "Move money from one of the caller's wallets to another wallet (idempotent)",
+            "url": {
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transfers"
+              ],
+              "raw": "{{baseUrl}}/transfers"
+            }
+          },
+          "response": [
+            {
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"OK\",\n  \"meta\": {\n    \"requestId\": \"req_6ce0eecd9fd7a31fdae9f47b\"\n  },\n  \"data\": {\n    \"id\": \"019a1b2c-3d4e-7f60-8a9b-0c1d2e3f4a60\",\n    \"fromWalletId\": \"019a1b2c-3d4e-7f60-8a9b-0c1d2e3f4a5b\",\n    \"toWalletId\": \"019a1b2c-3d4e-7f60-8a9b-0c1d2e3f4a5c\",\n    \"amount\": \"10.00\",\n    \"currency\": \"AED\",\n    \"status\": \"COMPLETED\",\n    \"createdAt\": \"2026-10-14T18:30:00.000Z\"\n  }\n}",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "e2833776-a659-59b9-aed7-b31ef5c62a99",
+              "name": "201",
+              "status": "Created"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "6977467e-8eac-52f6-a12e-90f341804c45",
+              "name": "VALIDATION_FAILED or INVALID_IDEMPOTENCY_KEY (missing or malformed header)",
+              "status": "Bad Request"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "1b7a5590-7ddb-5b05-a30c-9c797d15ba0c",
+              "name": "Missing, invalid or expired access token",
+              "status": "Unauthorized"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "c98b2588-c768-5ca9-ad40-9d1244614d43",
+              "name": "WALLET_NOT_FOUND (also for a source wallet of another user)",
+              "status": "Not Found"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "cae23c80-e987-51b9-a1a5-92f750690e9f",
+              "name": "INSUFFICIENT_FUNDS, CURRENCY_MISMATCH, UNSUPPORTED_CURRENCY, INVALID_AMOUNT, INVALID_TRANSFER, ACCOUNT_NOT_ACTIVE or IDEMPOTENCY_KEY_REUSED",
+              "status": "Unprocessable Entity (WebDAV) (RFC 4918)"
+            }
+          ]
+        }
+      ],
+      "name": "Transfers"
     },
     {
       "event": [
