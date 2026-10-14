@@ -5,6 +5,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -16,8 +17,10 @@ import {
   ApiTags,
   getSchemaPath,
 } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { Public } from '../../common/decorators/public.decorator.js';
 import { ResponseMessage } from '../../common/decorators/response-message.decorator.js';
+import { IDEMPOTENT_REPLAYED_HEADER } from '../../common/idempotency/exceptions/idempotency.exceptions.js';
 import {
   ApiFailureResponse,
   ApiOkEnvelope,
@@ -47,6 +50,8 @@ export class WebhooksController {
     operationId: 'webhooks.receive',
     summary:
       'Receive a signed payment provider event (HMAC-SHA256 over timestamp.rawBody)',
+    description:
+      'payment.succeeded credits data.walletId once per event id; redeliveries answer the stored receipt (header Idempotent-Replayed: true). A deposit that cannot be credited answers 200 with status "rejected" and a reason. Other event types answer status "ignored".',
   })
   @ApiParam({ name: 'provider', enum: WEBHOOK_PROVIDER_NAMES })
   @ApiHeader({
@@ -75,10 +80,21 @@ export class WebhooksController {
     'WEBHOOK_SIGNATURE_HEADERS_INVALID, WEBHOOK_TIMESTAMP_EXPIRED, INVALID_WEBHOOK_SIGNATURE or INVALID_WEBHOOK_EVENT',
   )
   @ApiFailureResponse(HttpStatus.NOT_FOUND, 'WEBHOOK_PROVIDER_NOT_FOUND')
-  receive(
+  @ApiFailureResponse(
+    HttpStatus.UNPROCESSABLE_ENTITY,
+    'IDEMPOTENCY_KEY_REUSED (same event id, other body)',
+  )
+  @ApiFailureResponse(
+    HttpStatus.SERVICE_UNAVAILABLE,
+    "DEPOSITS_UNAVAILABLE (the provider's clearing account is not active; retry later)",
+  )
+  async receive(
     @Param('provider') provider: WebhookProvider,
     @Body() body: unknown,
-  ): WebhookReceiptDto {
-    return this.payments.receive(provider, body);
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<WebhookReceiptDto> {
+    const result = await this.payments.receive(provider, body);
+    if (result.replayed) res.setHeader(IDEMPOTENT_REPLAYED_HEADER, 'true');
+    return result.body;
   }
 }
