@@ -1798,6 +1798,185 @@
           "listen": "prerequest",
           "script": {
             "exec": [
+              "// Payment webhook (A-B7.2): x-signature = hex(HMAC-SHA256(secret, x-timestamp + \".\" + raw body))",
+              "// with the provider secret (webhookSecretStripe, filled by npm run postman:env). A new event id",
+              "// per request; keepWebhookEventId = true sends the previous one again (redelivery test).",
+              "const cryptoJs = require('crypto-js');",
+              "const SECRETS = { stripe: 'webhookSecretStripe' };",
+              "",
+              "const providerVar = pm.request.url.variables.get('provider');",
+              "const provider = pm.variables.replaceIn(providerVar || 'stripe');",
+              "const secret = pm.environment.get(SECRETS[provider]);",
+              "if (!secret)",
+              "  throw new Error(`${SECRETS[provider] || 'webhook secret'} is empty: run npm run postman:env`);",
+              "",
+              "if (pm.environment.get('keepWebhookEventId') !== 'true' || !pm.environment.get('webhookEventId'))",
+              "  pm.environment.set('webhookEventId', `evt_${pm.variables.replaceIn('{{$guid}}').replace(/-/g, '')}`);",
+              "",
+              "const raw = pm.request.body && pm.request.body.raw ? pm.variables.replaceIn(pm.request.body.raw) : '';",
+              "// The signature covers these exact bytes, so send the resolved body",
+              "if (raw) pm.request.body.update(raw);",
+              "",
+              "const timestamp = Math.floor(Date.now() / 1000).toString();",
+              "pm.request.headers.upsert({ key: 'x-timestamp', value: timestamp });",
+              "pm.request.headers.upsert({",
+              "  key: 'x-signature',",
+              "  value: cryptoJs.HmacSHA256(`${timestamp}.${raw}`, secret).toString(cryptoJs.enc.Hex),",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "id": "3043b35f-f201-50c1-a45e-abeb6ce8eef3",
+      "item": [
+        {
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('operationId', 'webhooks.receive');"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// A provider redelivers an event it thinks failed: the same signed request answers 200 again. (2.17)",
+                  "if (pm.response.code === 200) {",
+                  "  const first = pm.response.json().data;",
+                  "  pm.test('webhooks.receive: receipt names the event', () =>",
+                  "    pm.expect(first.eventId).to.eql(pm.environment.get('webhookEventId')),",
+                  "  );",
+                  "  pm.sendRequest(",
+                  "    {",
+                  "      url: pm.request.url.toString(),",
+                  "      method: 'POST',",
+                  "      header: pm.request.headers.toObject(),",
+                  "      body: { mode: 'raw', raw: pm.request.body.raw },",
+                  "    },",
+                  "    (err, res) => {",
+                  "      pm.test('webhooks.receive: redelivery answers 200 with the same receipt', () => {",
+                  "        pm.expect(err).to.eql(null);",
+                  "        pm.expect(res.code).to.eql(200);",
+                  "        pm.expect(res.json().data).to.eql(first);",
+                  "      });",
+                  "    },",
+                  "  );",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "057dca87-f936-5422-aace-41fc2deb57cc",
+          "name": "Receive a signed payment provider event (HMAC-SHA256 over timestamp.rawBody)",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"id\": \"{{webhookEventId}}\",\n  \"type\": \"payment.succeeded\",\n  \"data\": {\n    \"walletId\": \"{{walletId}}\",\n    \"amount\": \"{{amount}}\",\n    \"currency\": \"{{currency}}\"\n  }\n}"
+            },
+            "description": "Receive a signed payment provider event (HMAC-SHA256 over timestamp.rawBody)",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "name": "Receive a signed payment provider event (HMAC-SHA256 over timestamp.rawBody)",
+            "url": {
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "webhooks",
+                ":provider"
+              ],
+              "raw": "{{baseUrl}}/webhooks/:provider",
+              "variable": [
+                {
+                  "description": {
+                    "content": "(Required)  (This can only be one of stripe)",
+                    "type": "text/plain"
+                  },
+                  "key": "provider",
+                  "value": "stripe"
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"OK\",\n  \"meta\": {\n    \"requestId\": \"req_6ce0eecd9fd7a31fdae9f47b\"\n  },\n  \"data\": {\n    \"provider\": \"stripe\",\n    \"eventId\": \"evt_3PqR8s2eZvKYlo2C\",\n    \"type\": \"payment.succeeded\",\n    \"status\": \"received\"\n  }\n}",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "8b5d854b-0ad5-5f80-a667-ac2e3d5484bf",
+              "name": "200",
+              "status": "OK"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "0af13097-d91c-5cb9-ab61-9bef42055379",
+              "name": "WEBHOOK_SIGNATURE_HEADERS_INVALID, WEBHOOK_TIMESTAMP_EXPIRED, INVALID_WEBHOOK_SIGNATURE or INVALID_WEBHOOK_EVENT",
+              "status": "Bad Request"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "edae9227-f243-55a0-a953-212b2f84ed5b",
+              "name": "WEBHOOK_PROVIDER_NOT_FOUND",
+              "status": "Not Found"
+            }
+          ]
+        }
+      ],
+      "name": "Webhooks"
+    },
+    {
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
               "// B2B signed request (A-B4.5): HMAC-SHA256 over",
               "//   METHOD \\n path?query \\n timestamp \\n nonce \\n hex(sha256(raw body))",
               "// with the dev-client secret (b2bSecret, filled by npm run postman:env). Ed25519 clients use",

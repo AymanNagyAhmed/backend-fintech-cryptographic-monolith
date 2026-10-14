@@ -69,6 +69,15 @@ const BODIES: Record<string, object> = {
     amount: '{{amount}}',
     currency: '{{currency}}',
   },
+  'webhooks.receive': {
+    id: '{{webhookEventId}}',
+    type: 'payment.succeeded',
+    data: {
+      walletId: '{{walletId}}',
+      amount: '{{amount}}',
+      currency: '{{currency}}',
+    },
+  },
 };
 
 /** Header values taken from the environment (set by the collection pre-request script). */
@@ -79,11 +88,13 @@ const HEADER_VALUES: Record<string, string> = {
 /** Path variables by context (operationId prefix). */
 const PATH_VARIABLES: Record<string, Record<string, string>> = {
   wallets: { id: '{{walletId}}' },
+  webhooks: { provider: 'stripe' },
 };
 
 /** Folder-level pre-request scripts. */
 const FOLDER_SCRIPTS: Record<string, string> = {
   B2B: 'signed-request.pre-request.js',
+  Webhooks: 'webhook-signature.pre-request.js',
 };
 
 /** Set by the folder script, so the static example values are dropped. */
