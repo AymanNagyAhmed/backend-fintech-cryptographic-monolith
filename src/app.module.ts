@@ -7,6 +7,7 @@ import { AppService } from './app.service.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor.js';
 import { createValidationPipe } from './common/pipes/validation.pipe.js';
+import { QueueModule } from './common/queue/queue.module.js';
 import { RateLimitModule } from './common/throttler/rate-limit.module.js';
 import {
   validate,
@@ -19,6 +20,7 @@ import { B2bModule } from './modules/b2b/b2b.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { WalletsModule } from './modules/wallets/wallets.module.js';
+import { LedgerJobsModule } from './modules/ledger/jobs/ledger-jobs.module.js';
 import { LedgerModule } from './modules/ledger/ledger.module.js';
 
 @Module({
@@ -30,6 +32,7 @@ import { LedgerModule } from './modules/ledger/ledger.module.js';
         loggerParams(config.get('NODE_ENV', { infer: true })),
     }),
     DatabaseModule,
+    QueueModule,
     RateLimitModule,
     HealthModule,
     UsersModule,
@@ -37,6 +40,7 @@ import { LedgerModule } from './modules/ledger/ledger.module.js';
     B2bModule,
     WalletsModule,
     LedgerModule,
+    LedgerJobsModule,
   ],
   controllers: [AppController],
   providers: [

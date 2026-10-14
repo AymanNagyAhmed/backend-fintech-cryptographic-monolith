@@ -16,6 +16,7 @@ import {
 
 const PLACEHOLDER = 'change-me';
 const DURATION = /^\d+[smhd]$/;
+const CRON = /^[\d*/,?LW#A-Za-z-]+( [\d*/,?LW#A-Za-z-]+){4,5}$/;
 const LOCAL_URL = { require_tld: false, require_protocol: true };
 
 export const NODE_ENVS = ['development', 'test', 'production'] as const;
@@ -94,6 +95,11 @@ export class EnvironmentVariables {
   @Min(1)
   @Max(1000)
   WALLETS_MAX_PER_USER: number = 10;
+
+  // Cron pattern (5 or 6 fields, UTC) of the nightly ledger reconciliation job
+  @IsOptional()
+  @Matches(CRON, { message: '$property must be a cron pattern like 0 1 * * *' })
+  RECONCILIATION_CRON: string = '0 1 * * *';
 
   @IsString()
   @MinLength(32)

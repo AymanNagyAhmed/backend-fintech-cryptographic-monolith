@@ -57,6 +57,22 @@ $ npm run test:e2e
 $ npm run test:cov
 ```
 
+## Postman
+
+`postman/fintech-monolith.postman_collection.json` is generated from `/v1/docs-json`; do not edit it by hand.
+
+```bash
+npm run postman:build   # regenerate from the running API (override the URL with API=...)
+npm run postman:check   # every operation has operationId, tag, summary and is in the collection
+npm run postman:env     # write postman/environments/dev.local.postman_environment.json (git-ignored)
+npm run postman:test    # run the collection with Newman against the local API
+```
+
+- Per-request scripts live in `postman/scripts/<operationId>.(pre-request|test).js`.
+- Secrets (`b2bSecret` from `B2B_DEV_SECRET` in `.env`) only go into the local environment file.
+- `postman:test` registers a fresh user each run; registration is limited to 10 per hour per IP.
+- `newman` and `openapi-to-postmanv2` are dev-only tools. Their transitive dependencies make `npm audit` report high and critical findings; this is accepted because they are only used locally and in CI, never at runtime. Check runtime dependencies with `npm audit --omit=dev`.
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.

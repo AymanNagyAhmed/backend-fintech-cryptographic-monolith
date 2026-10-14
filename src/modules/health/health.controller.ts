@@ -40,7 +40,7 @@ const HEALTH_RESULT = {
   },
 };
 
-@ApiTags('health')
+@ApiTags('Health')
 // Probes and load balancers poll often from one IP
 @SkipThrottle()
 @Public()
@@ -59,7 +59,10 @@ export class HealthController {
   @Get('live')
   @HealthCheck({ swaggerDocumentation: false })
   @ResponseMessage('Service is live')
-  @ApiOperation({ summary: 'Liveness probe (process only, no dependencies)' })
+  @ApiOperation({
+    operationId: 'health.live',
+    summary: 'Liveness probe (process only, no dependencies)',
+  })
   @ApiOkEnvelope(HEALTH_RESULT)
   @ApiFailureResponse(503, 'Heap above the limit')
   live(): Promise<HealthCheckResult> {
@@ -72,7 +75,10 @@ export class HealthController {
   @Get('ready')
   @HealthCheck({ swaggerDocumentation: false })
   @ResponseMessage('Service is ready')
-  @ApiOperation({ summary: 'Readiness probe (PostgreSQL, Redis, OpenBao)' })
+  @ApiOperation({
+    operationId: 'health.ready',
+    summary: 'Readiness probe (PostgreSQL, Redis, OpenBao)',
+  })
   @ApiOkEnvelope(HEALTH_RESULT)
   @ApiFailureResponse(503, 'A dependency is down; error.details names it')
   ready(): Promise<HealthCheckResult> {

@@ -27,7 +27,12 @@
     "seed": "prisma db seed",
     "schema:ownership": "tsx scripts/check-schema-ownership.ts",
     "api-client": "tsx scripts/api-client.ts",
-    "sign-request": "tsx scripts/sign-request.ts"
+    "sign-request": "tsx scripts/sign-request.ts",
+    "job:reconcile": "tsx scripts/reconcile.ts",
+    "postman:build": "tsx scripts/postman/build-collection.ts",
+    "postman:check": "tsx scripts/postman/check-coverage.ts",
+    "postman:env": "tsx scripts/postman/build-env.ts",
+    "postman:test": "newman run postman/fintech-monolith.postman_collection.json -e postman/environments/dev.local.postman_environment.json --env-var freshUser=true --bail"
   },
   "dependencies": {
     "@nestjs/bullmq": "12.0.0",
@@ -66,6 +71,8 @@
     "@types/supertest": "^7.0.0",
     "@vitest/coverage-v8": "^4.1.2",
     "eslint": "10.12.0",
+    "newman": "6.2.3",
+    "openapi-to-postmanv2": "6.4.0",
     "oxlint": "^1.58.0",
     "oxlint-tsgolint": "^7.0.2001",
     "pino-pretty": "13.2.0",
