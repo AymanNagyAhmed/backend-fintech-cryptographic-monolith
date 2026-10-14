@@ -28,6 +28,7 @@
     "schema:ownership": "tsx scripts/check-schema-ownership.ts",
     "api-client": "tsx scripts/api-client.ts",
     "sign-request": "tsx scripts/sign-request.ts",
+    "job:reconcile": "tsx scripts/reconcile.ts",
     "postman:build": "tsx scripts/postman/build-collection.ts",
     "postman:check": "tsx scripts/postman/check-coverage.ts",
     "postman:env": "tsx scripts/postman/build-env.ts",

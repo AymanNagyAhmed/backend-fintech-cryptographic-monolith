@@ -76,4 +76,17 @@ describe('env validation', () => {
     expect(validate({ ...validEnv(), TRUST_PROXY: '1' }).TRUST_PROXY).toBe(1);
     expect(messageOf({ ...validEnv(), TRUST_PROXY: 'true' })).toContain('- TRUST_PROXY:');
   });
+
+  it('defaults RECONCILIATION_CRON to 01:00 and checks the field count', () => {
+    expect(validate(validEnv()).RECONCILIATION_CRON).toBe('0 1 * * *');
+    for (const cron of ['*/5 * * * *', '0 30 2 * * MON-FRI'])
+      expect(
+        validate({ ...validEnv(), RECONCILIATION_CRON: cron })
+          .RECONCILIATION_CRON,
+      ).toBe(cron);
+    for (const cron of ['nightly', '0 1 * *', '0 1 * * * * *', '0 1 * * *; rm'])
+      expect(messageOf({ ...validEnv(), RECONCILIATION_CRON: cron })).toContain(
+        '- RECONCILIATION_CRON:',
+      );
+  });
 });
