@@ -90,6 +90,13 @@ describe('env validation', () => {
       );
   });
 
+  it('defaults IDEMPOTENCY_PURGE_CRON to 01:30 and rejects a bad pattern', () => {
+    expect(validate(validEnv()).IDEMPOTENCY_PURGE_CRON).toBe('30 1 * * *');
+    expect(
+      messageOf({ ...validEnv(), IDEMPOTENCY_PURGE_CRON: 'nightly' }),
+    ).toContain('- IDEMPOTENCY_PURGE_CRON:');
+  });
+
   it('defaults the daily transfer limits and accepts amounts at the currency scale', () => {
     const env = validate(validEnv());
     expect([

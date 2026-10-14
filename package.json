@@ -29,6 +29,7 @@
     "api-client": "tsx scripts/api-client.ts",
     "sign-request": "tsx scripts/sign-request.ts",
     "job:reconcile": "tsx scripts/reconcile.ts",
+    "job:purge-idempotency-keys": "tsx scripts/purge-idempotency-keys.ts",
     "postman:build": "tsx scripts/postman/build-collection.ts",
     "postman:check": "tsx scripts/postman/check-coverage.ts",
     "postman:env": "tsx scripts/postman/build-env.ts",

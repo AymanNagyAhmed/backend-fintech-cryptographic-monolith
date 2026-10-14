@@ -5,6 +5,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
+import { IdempotencyJobsModule } from './common/idempotency/jobs/idempotency-jobs.module.js';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor.js';
 import { createValidationPipe } from './common/pipes/validation.pipe.js';
 import { QueueModule } from './common/queue/queue.module.js';
@@ -43,6 +44,7 @@ import { TransfersModule } from './modules/transfers/transfers.module.js';
     LedgerModule,
     LedgerJobsModule,
     TransfersModule,
+    IdempotencyJobsModule,
   ],
   controllers: [AppController],
   providers: [

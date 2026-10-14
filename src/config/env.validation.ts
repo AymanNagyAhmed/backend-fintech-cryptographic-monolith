@@ -125,6 +125,13 @@ export class EnvironmentVariables {
   @Matches(CRON, { message: '$property must be a cron pattern like 0 1 * * *' })
   RECONCILIATION_CRON: string = '0 1 * * *';
 
+  // Cron pattern (UTC) of the nightly purge of idempotency keys older than 30 days
+  @IsOptional()
+  @Matches(CRON, {
+    message: '$property must be a cron pattern like 30 1 * * *',
+  })
+  IDEMPOTENCY_PURGE_CRON: string = '30 1 * * *';
+
   @IsString()
   @MinLength(32)
   @NotEquals(PLACEHOLDER)

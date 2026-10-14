@@ -205,7 +205,7 @@ describe('Idempotency keys schema (database)', () => {
     ).rejects.toThrow(/idempotency_keys_response_chk/);
   });
 
-  it('app_writer cannot DELETE keys (the purge job comes with A-B6.6)', async () => {
+  it('app_writer cannot DELETE keys (only ledger.purge_idempotency_keys deletes old ones)', async () => {
     await expect(
       rolledBack(app, () => app.query(`DELETE FROM ledger.idempotency_keys`)),
     ).rejects.toThrow(/permission denied/);
