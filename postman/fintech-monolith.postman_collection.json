@@ -1784,7 +1784,7 @@
                 }
               ],
               "id": "cae23c80-e987-51b9-a1a5-92f750690e9f",
-              "name": "INSUFFICIENT_FUNDS, CURRENCY_MISMATCH, UNSUPPORTED_CURRENCY, INVALID_AMOUNT, INVALID_TRANSFER, ACCOUNT_NOT_ACTIVE or IDEMPOTENCY_KEY_REUSED",
+              "name": "INSUFFICIENT_FUNDS, ACCOUNT_FROZEN, ACCOUNT_CLOSED (source or target wallet), DAILY_LIMIT_EXCEEDED (TRANSFER_DAILY_LIMIT_<currency> per source wallet and UTC day), CURRENCY_MISMATCH, UNSUPPORTED_CURRENCY, INVALID_AMOUNT, INVALID_TRANSFER or IDEMPOTENCY_KEY_REUSED",
               "status": "Unprocessable Entity (WebDAV) (RFC 4918)"
             }
           ]

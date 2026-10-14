@@ -89,4 +89,34 @@ describe('env validation', () => {
         '- RECONCILIATION_CRON:',
       );
   });
+
+  it('defaults the daily transfer limits and accepts amounts at the currency scale', () => {
+    const env = validate(validEnv());
+    expect([
+      env.TRANSFER_DAILY_LIMIT_AED,
+      env.TRANSFER_DAILY_LIMIT_USD,
+      env.TRANSFER_DAILY_LIMIT_EUR,
+      env.TRANSFER_DAILY_LIMIT_BTC,
+    ]).toEqual(['50000.00', '15000.00', '15000.00', '1.00000000']);
+    expect(
+      validate({ ...validEnv(), TRANSFER_DAILY_LIMIT_AED: '250' })
+        .TRANSFER_DAILY_LIMIT_AED,
+    ).toBe('250');
+    expect(
+      validate({ ...validEnv(), TRANSFER_DAILY_LIMIT_BTC: '0.00000001' })
+        .TRANSFER_DAILY_LIMIT_BTC,
+    ).toBe('0.00000001');
+  });
+
+  it.each([
+    ['TRANSFER_DAILY_LIMIT_AED', '0'],
+    ['TRANSFER_DAILY_LIMIT_AED', '0.00'],
+    ['TRANSFER_DAILY_LIMIT_AED', '-1.00'],
+    ['TRANSFER_DAILY_LIMIT_USD', '1.001'],
+    ['TRANSFER_DAILY_LIMIT_EUR', '1e6'],
+    ['TRANSFER_DAILY_LIMIT_EUR', '1000000000000'],
+    ['TRANSFER_DAILY_LIMIT_BTC', '0.000000001'],
+  ])('rejects %s=%s', (key, value) => {
+    expect(messageOf({ ...validEnv(), [key]: value })).toContain(`- ${key}:`);
+  });
 });

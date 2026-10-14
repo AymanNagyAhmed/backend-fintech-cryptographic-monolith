@@ -1,17 +1,32 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
 import { IdempotencyService } from '../../common/idempotency/idempotency.service.js';
 import type { IdempotentResponse } from '../../common/idempotency/interfaces/idempotent-response.interface.js';
-import { isCurrency, type Currency } from '../../common/money/currency.js';
+import {
+  CURRENCIES,
+  isCurrency,
+  type Currency,
+} from '../../common/money/currency.js';
 import { UnsupportedCurrencyException } from '../../common/money/exceptions/unsupported-currency.exception.js';
 import { Money } from '../../common/money/money.js';
-import type { Prisma, Transfer } from '../../generated/prisma/client.js';
+import type { EnvironmentVariables } from '../../config/env.validation.js';
+import {
+  WalletStatus,
+  type Prisma,
+  type Transfer,
+} from '../../generated/prisma/client.js';
+import { sumTransfersOutToday } from '../../generated/prisma/sql.js';
+import { AccountNotActiveException } from '../ledger/exceptions/account-not-active.exception.js';
 import { LedgerService } from '../ledger/ledger.service.js';
+import type { WalletView } from '../wallets/wallets.service.js';
 import { WalletsService } from '../wallets/wallets.service.js';
 import type { CreateTransferDto } from './dto/create-transfer.dto.js';
 import type { TransferDto } from './dto/transfer.dto.js';
 import {
+  dailyLimitExceeded,
   sameWalletTransfer,
+  transferAccountNotActive,
   transferCurrencyMismatch,
   transferWalletNotFound,
 } from './exceptions/transfer.exceptions.js';
@@ -27,18 +42,40 @@ const toDto = (row: Transfer, currency: Currency): TransferDto => ({
   createdAt: row.createdAt.toISOString(),
 });
 
+const assertActive = (
+  wallet: WalletView,
+  field: 'fromWalletId' | 'toWalletId',
+) => {
+  if (wallet.status !== WalletStatus.active)
+    throw transferAccountNotActive(field, wallet.status);
+};
+
 @Injectable()
 export class TransfersService {
+  private readonly dailyLimits: Record<Currency, Money>;
+
   constructor(
     private readonly idempotency: IdempotencyService,
     private readonly ledger: LedgerService,
     private readonly wallets: WalletsService,
-  ) {}
+    config: ConfigService<EnvironmentVariables, true>,
+  ) {
+    this.dailyLimits = Object.fromEntries(
+      CURRENCIES.map((c) => [
+        c,
+        Money.of(
+          config.get(`TRANSFER_DAILY_LIMIT_${c}` as const, { infer: true }),
+          c,
+        ),
+      ]),
+    ) as Record<Currency, Money>;
+  }
 
   /**
    * POST /transfers. Keys are scoped per caller, so two users' keys never meet. Claim, posting
-   * (locks, funds check, entries, balances), transfer row and stored response commit in one
-   * transaction: a retry with the same key replays the 201, a failed attempt leaves nothing.
+   * (locks, funds check, entries, balances), daily limit, transfer row and stored response
+   * commit in one transaction: a retry with the same key replays the 201, a failed attempt
+   * leaves nothing.
    */
   create(
     userId: string,
@@ -72,21 +109,37 @@ export class TransfersService {
       throw transferCurrencyMismatch('fromWalletId', from.currency);
     if (to.currency !== amount.currency)
       throw transferCurrencyMismatch('toWalletId', to.currency);
+    assertActive(from, 'fromWalletId');
+    assertActive(to, 'toWalletId');
 
     const ref = `transfer:${randomUUID()}`;
-    await this.ledger.post(
-      {
-        ref,
-        entries: [
-          {
-            accountId: from.ledgerAccountId,
-            amount: amount.negate().toString(),
-          },
-          { accountId: to.ledgerAccountId, amount: amount.toString() },
-        ],
-      },
-      tx,
-    );
+    try {
+      await this.ledger.post(
+        {
+          ref,
+          entries: [
+            {
+              accountId: from.ledgerAccountId,
+              amount: amount.negate().toString(),
+            },
+            { accountId: to.ledgerAccountId, amount: amount.toString() },
+          ],
+        },
+        tx,
+      );
+    } catch (e) {
+      // Ledger account ids stay internal: answer with the wallet field instead
+      if (e instanceof AccountNotActiveException)
+        throw transferAccountNotActive(
+          e.accountId === from.ledgerAccountId ? 'fromWalletId' : 'toWalletId',
+          e.status,
+        );
+      throw e;
+    }
+    // After post: it holds the source account lock until commit, so the sum counts every
+    // committed transfer of this account and concurrent ones wait their turn
+    await this.assertWithinDailyLimit(tx, from.ledgerAccountId, amount);
+
     const row = await tx.transfer.create({
       data: {
         ref,
@@ -100,5 +153,19 @@ export class TransfersService {
       },
     });
     return toDto(row, amount.currency);
+  }
+
+  private async assertWithinDailyLimit(
+    tx: Prisma.TransactionClient,
+    accountId: string,
+    amount: Money,
+  ): Promise<void> {
+    const [{ total }] = await tx.$queryRawTyped(
+      sumTransfersOutToday(accountId),
+    );
+    const sentToday = Money.of(total ?? '0', amount.currency);
+    const limit = this.dailyLimits[amount.currency];
+    if (sentToday.add(amount).gt(limit))
+      throw dailyLimitExceeded(limit, sentToday);
   }
 }

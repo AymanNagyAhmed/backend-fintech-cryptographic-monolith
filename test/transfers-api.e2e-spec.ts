@@ -1,4 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { randomUUID } from 'node:crypto';
@@ -6,6 +7,8 @@ import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import { AppModule } from '../src/app.module.js';
 import { setupApp } from '../src/app.setup.js';
+import { Money } from '../src/common/money/money.js';
+import type { EnvironmentVariables } from '../src/config/env.validation.js';
 import { PrismaService } from '../src/database/prisma.service.js';
 import { LedgerService } from '../src/modules/ledger/ledger.service.js';
 
@@ -427,6 +430,156 @@ describe('Transfers API (e2e)', () => {
       );
       expect(res.body.error.code).toBe(code);
       if (field) expect(res.body.error.details[0].field).toBe(field);
+    });
+  });
+
+  describe('frozen and closed wallets', () => {
+    const setWalletStatus = (id: string, status: string) =>
+      prisma.$executeRaw`
+        UPDATE wallet.wallets SET status = ${status}::wallet.wallet_status, updated_at = now()
+        WHERE id = ${id}::uuid`;
+    const ledgerAccountOf = async (walletId: string) =>
+      (await prisma.wallet.findUniqueOrThrow({ where: { id: walletId } }))
+        .ledgerAccountId;
+
+    it.each([
+      ['source', 'fromWalletId', 'frozen', 'ACCOUNT_FROZEN'],
+      ['source', 'fromWalletId', 'closed', 'ACCOUNT_CLOSED'],
+      ['target', 'toWalletId', 'frozen', 'ACCOUNT_FROZEN'],
+      ['target', 'toWalletId', 'closed', 'ACCOUNT_CLOSED'],
+    ])(
+      'a %s wallet that is %s: 422 and nothing moves',
+      async (_, field, status, code) => {
+        const from = await newWallet(alice, 'AED', '50.00');
+        const to = await newWallet(bob);
+        await setWalletStatus(field === 'fromWalletId' ? from : to, status);
+        const res = await transfer(alice, {
+          fromWalletId: from,
+          toWalletId: to,
+          amount: '1.00',
+          currency: 'AED',
+        }).expect(422);
+        expect(res.body.error).toMatchObject({
+          code,
+          details: [{ field, issue: `wallet is ${status}` }],
+        });
+        expect(await balance(alice, from)).toBe('50.00');
+        expect(await balance(bob, to)).toBe('0.00');
+      },
+    );
+
+    it('a frozen ledger account behind an active wallet: ACCOUNT_FROZEN without internal ids', async () => {
+      const from = await newWallet(alice, 'AED', '50.00');
+      const to = await newWallet(bob);
+      const accountId = await ledgerAccountOf(to);
+      await prisma.account.update({
+        where: { id: accountId },
+        data: { status: 'frozen' },
+      });
+      const res = await transfer(alice, {
+        fromWalletId: from,
+        toWalletId: to,
+        amount: '1.00',
+        currency: 'AED',
+      }).expect(422);
+      expect(res.body.error).toMatchObject({
+        code: 'ACCOUNT_FROZEN',
+        details: [{ field: 'toWalletId', issue: 'wallet is frozen' }],
+      });
+      expect(JSON.stringify(res.body)).not.toContain(accountId);
+      expect(await balance(alice, from)).toBe('50.00');
+    });
+
+    it('a failed attempt is not stored: the same key succeeds once the wallet is unfrozen', async () => {
+      const from = await newWallet(alice, 'AED', '50.00');
+      const to = await newWallet(bob);
+      const body = {
+        fromWalletId: from,
+        toWalletId: to,
+        amount: '1.00',
+        currency: 'AED',
+      };
+      const key = randomUUID();
+      await setWalletStatus(from, 'frozen');
+      await transfer(alice, body, key).expect(422);
+      await setWalletStatus(from, 'active');
+      const retry = await transfer(alice, body, key).expect(201);
+      expect(retry.headers['idempotent-replayed']).toBeUndefined();
+    });
+  });
+
+  describe('daily limit per source wallet (UTC day)', () => {
+    let limit: Money;
+    const aed = (amount: string) => Money.of(amount, 'AED');
+
+    beforeAll(() => {
+      limit = aed(
+        app
+          .get(ConfigService<EnvironmentVariables, true>)
+          .get('TRANSFER_DAILY_LIMIT_AED', { infer: true }),
+      );
+    });
+
+    it('allows up to the limit, then 422 DAILY_LIMIT_EXCEEDED; another wallet has its own limit', async () => {
+      const from = await newWallet(alice, 'AED', limit.add(limit).toString());
+      const other = await newWallet(alice, 'AED', '10.00');
+      const to = await newWallet(bob);
+      const send = (fromWalletId: string, amount: string) =>
+        transfer(alice, {
+          fromWalletId,
+          toWalletId: to,
+          amount,
+          currency: 'AED',
+        });
+      const first = limit.subtract(aed('1.00'));
+      await send(from, first.toString()).expect(201);
+      const over = await send(from, '2.00').expect(422);
+      expect(over.body.error).toMatchObject({
+        code: 'DAILY_LIMIT_EXCEEDED',
+        details: [
+          {
+            field: 'amount',
+            issue: `Daily limit is ${limit.toString()} AED, ${first.toString()} sent today, 1.00 left`,
+          },
+        ],
+      });
+      await send(from, '1.00').expect(201);
+      expect((await send(from, '0.01').expect(422)).body.error.code).toBe(
+        'DAILY_LIMIT_EXCEEDED',
+      );
+      await send(other, '10.00').expect(201);
+      expect(await balance(alice, from)).toBe(limit.toString());
+      expect(await balance(bob, to)).toBe(limit.add(aed('10.00')).toString());
+    });
+
+    it('10 parallel transfers of a fifth of the limit: exactly 5 succeed', async () => {
+      const fifth = limit.multiply('0.2', 'DOWN');
+      const from = await newWallet(
+        alice,
+        'AED',
+        fifth.multiply('10', 'DOWN').toString(),
+      );
+      const to = await newWallet(bob);
+      const responses = await Promise.all(
+        Array.from({ length: 10 }, () =>
+          transfer(alice, {
+            fromWalletId: from,
+            toWalletId: to,
+            amount: fifth.toString(),
+            currency: 'AED',
+          }),
+        ),
+      );
+      const codes = responses.map((r) =>
+        r.status === 201 ? 201 : `${r.status} ${r.body.error.code as string}`,
+      );
+      expect(codes.filter((c) => c === 201)).toHaveLength(5);
+      expect(
+        codes.filter((c) => c === '422 DAILY_LIMIT_EXCEEDED'),
+      ).toHaveLength(5);
+      expect(await balance(bob, to)).toBe(
+        fifth.multiply('5', 'DOWN').toString(),
+      );
     });
   });
 });
