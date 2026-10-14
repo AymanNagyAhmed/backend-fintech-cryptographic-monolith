@@ -18,6 +18,11 @@ const PLACEHOLDER = 'change-me';
 const DURATION = /^\d+[smhd]$/;
 const CRON = /^[\d*/,?LW#A-Za-z-]+( [\d*/,?LW#A-Za-z-]+){4,5}$/;
 const LOCAL_URL = { require_tld: false, require_protocol: true };
+// Positive decimal strings within NUMERIC(20, 8) at the currency scale; zero is refused
+const LIMIT_FIAT = /^(?!0+(\.0+)?$)\d{1,12}(\.\d{1,2})?$/;
+const LIMIT_FIAT_MESSAGE =
+  '$property must be a positive amount with up to 2 decimals';
+const LIMIT_BTC = /^(?!0+(\.0+)?$)\d{1,12}(\.\d{1,8})?$/;
 
 export const NODE_ENVS = ['development', 'test', 'production'] as const;
 export const SIGNING_ALGS = ['ed25519', 'ecdsa-p256', 'ml-dsa-65'] as const;
@@ -95,6 +100,25 @@ export class EnvironmentVariables {
   @Min(1)
   @Max(1000)
   WALLETS_MAX_PER_USER: number = 10;
+
+  // Outgoing transfers per source wallet and UTC day (POST /transfers answers DAILY_LIMIT_EXCEEDED beyond it)
+  @IsOptional()
+  @Matches(LIMIT_FIAT, { message: LIMIT_FIAT_MESSAGE })
+  TRANSFER_DAILY_LIMIT_AED: string = '50000.00';
+
+  @IsOptional()
+  @Matches(LIMIT_FIAT, { message: LIMIT_FIAT_MESSAGE })
+  TRANSFER_DAILY_LIMIT_USD: string = '15000.00';
+
+  @IsOptional()
+  @Matches(LIMIT_FIAT, { message: LIMIT_FIAT_MESSAGE })
+  TRANSFER_DAILY_LIMIT_EUR: string = '15000.00';
+
+  @IsOptional()
+  @Matches(LIMIT_BTC, {
+    message: '$property must be a positive amount with up to 8 decimals',
+  })
+  TRANSFER_DAILY_LIMIT_BTC: string = '1.00000000';
 
   // Cron pattern (5 or 6 fields, UTC) of the nightly ledger reconciliation job
   @IsOptional()

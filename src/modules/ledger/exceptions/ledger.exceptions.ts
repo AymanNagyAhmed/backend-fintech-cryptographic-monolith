@@ -1,5 +1,6 @@
 import { HttpStatus } from '@nestjs/common';
 import { DomainException } from '../../../common/exceptions/domain.exception.js';
+import { AccountNotActiveException } from './account-not-active.exception.js';
 
 // Error codes of the ledger; clients branch on error.code
 
@@ -43,12 +44,7 @@ export const accountNotFound = (accountId: string) =>
   );
 
 export const accountNotActive = (accountId: string, status: string) =>
-  new DomainException(
-    'ACCOUNT_NOT_ACTIVE',
-    'A ledger account of the posting is not active.',
-    HttpStatus.UNPROCESSABLE_ENTITY,
-    [{ field: 'accountId', issue: `${accountId} is ${status}` }],
-  );
+  new AccountNotActiveException(accountId, status);
 
 export const insufficientFunds = (requested: string, available: string) =>
   new DomainException(

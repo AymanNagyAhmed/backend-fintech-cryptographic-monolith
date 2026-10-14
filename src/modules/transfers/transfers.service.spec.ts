@@ -1,5 +1,8 @@
+import type { ConfigService } from '@nestjs/config';
 import type { IdempotencyService } from '../../common/idempotency/idempotency.service.js';
+import type { EnvironmentVariables } from '../../config/env.validation.js';
 import { Prisma } from '../../generated/prisma/client.js';
+import { AccountNotActiveException } from '../ledger/exceptions/account-not-active.exception.js';
 import type { LedgerService } from '../ledger/ledger.service.js';
 import type { WalletsService } from '../wallets/wallets.service.js';
 import type { CreateTransferDto } from './dto/create-transfer.dto.js';
@@ -13,12 +16,19 @@ describe('TransfersService.create', () => {
     amount: '10.5',
     currency: 'AED',
   } satisfies CreateTransferDto;
-  const wallet = (id: string, currency = 'AED') => ({
+  const wallet = (id: string, currency = 'AED', status = 'active') => ({
     id,
     currency,
+    status,
     ledgerAccountId: `acc-${id}`,
   });
-  const tx = { transfer: { create: vi.fn() } };
+  const limits: Record<string, string> = {
+    TRANSFER_DAILY_LIMIT_AED: '100.00',
+    TRANSFER_DAILY_LIMIT_USD: '15000.00',
+    TRANSFER_DAILY_LIMIT_EUR: '15000.00',
+    TRANSFER_DAILY_LIMIT_BTC: '1.00000000',
+  };
+  const tx = { transfer: { create: vi.fn() }, $queryRawTyped: vi.fn() };
   let runOnce: ReturnType<typeof vi.fn>;
   let post: ReturnType<typeof vi.fn>;
   let findOwned: ReturnType<typeof vi.fn>;
@@ -48,10 +58,15 @@ describe('TransfersService.create', () => {
       ...data,
       amount: new Prisma.Decimal('10.5'),
     }));
+    tx.$queryRawTyped.mockResolvedValue([{ total: '0.00000000' }]);
     service = new TransfersService(
       { runOnce } as unknown as IdempotencyService,
       { post } as unknown as LedgerService,
       { findOwned, findById } as unknown as WalletsService,
+      { get: (key: string) => limits[key] } as unknown as ConfigService<
+        EnvironmentVariables,
+        true
+      >,
     );
   });
 
@@ -168,5 +183,89 @@ describe('TransfersService.create', () => {
       code: 'INSUFFICIENT_FUNDS',
     });
     expect(tx.transfer.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['source', 'fromWalletId', 'frozen', 'ACCOUNT_FROZEN'],
+    ['source', 'fromWalletId', 'closed', 'ACCOUNT_CLOSED'],
+    ['target', 'toWalletId', 'frozen', 'ACCOUNT_FROZEN'],
+    ['target', 'toWalletId', 'closed', 'ACCOUNT_CLOSED'],
+  ] as const)(
+    'answers 422 for a %s wallet that is %s',
+    async (_, field, status, code) => {
+      (field === 'fromWalletId' ? findOwned : findById).mockResolvedValue(
+        wallet(field, 'AED', status),
+      );
+      await expect(service.create(userId, 'k', dto)).rejects.toMatchObject({
+        code,
+        statusCode: 422,
+        details: [{ field, issue: `wallet is ${status}` }],
+      });
+      expect(post).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['acc-w-from', 'frozen', 'fromWalletId', 'ACCOUNT_FROZEN'],
+    ['acc-w-to', 'closed', 'toWalletId', 'ACCOUNT_CLOSED'],
+  ] as const)(
+    'maps ACCOUNT_NOT_ACTIVE of ledger account %s (%s) to the wallet field',
+    async (accountId, status, field, code) => {
+      post.mockRejectedValue(new AccountNotActiveException(accountId, status));
+      const error = await service.create(userId, 'k', dto).catch((e) => e);
+      expect(error).toMatchObject({ code, details: [{ field }] });
+      expect(JSON.stringify(error.details)).not.toContain('acc-');
+      expect(tx.transfer.create).not.toHaveBeenCalled();
+    },
+  );
+
+  describe('daily limit (AED 100.00 here)', () => {
+    const sent = (total: string | null) =>
+      tx.$queryRawTyped.mockResolvedValue([{ total }]);
+
+    it('sums the source account after the posting holds its lock', async () => {
+      await service.create(userId, 'k', dto);
+      expect(tx.$queryRawTyped.mock.calls[0][0].values).toEqual(['acc-w-from']);
+      expect(post.mock.invocationCallOrder[0]).toBeLessThan(
+        tx.$queryRawTyped.mock.invocationCallOrder[0],
+      );
+    });
+
+    it.each([
+      ['nothing sent yet', '0.00000000'],
+      ['an empty sum', null],
+      ['exactly the limit after this one', '89.50000000'],
+    ])('allows the transfer with %s', async (_, total) => {
+      sent(total);
+      await expect(service.create(userId, 'k', dto)).resolves.toMatchObject({
+        statusCode: 201,
+      });
+    });
+
+    it('answers 422 DAILY_LIMIT_EXCEEDED one cent over and writes no transfer row', async () => {
+      sent('89.51000000');
+      await expect(service.create(userId, 'k', dto)).rejects.toMatchObject({
+        code: 'DAILY_LIMIT_EXCEEDED',
+        statusCode: 422,
+        details: [
+          {
+            field: 'amount',
+            issue: 'Daily limit is 100.00 AED, 89.51 sent today, 10.49 left',
+          },
+        ],
+      });
+      expect(tx.transfer.create).not.toHaveBeenCalled();
+    });
+
+    it('never reports a negative amount left after the limit was lowered', async () => {
+      sent('150.00000000');
+      await expect(service.create(userId, 'k', dto)).rejects.toMatchObject({
+        details: [
+          {
+            issue: 'Daily limit is 100.00 AED, 150.00 sent today, 0.00 left',
+          },
+        ],
+      });
+    });
   });
 });
