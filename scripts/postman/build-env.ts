@@ -17,6 +17,11 @@ const SECRETS_FROM_ENV: Record<string, string> = {
   b2bSecret: 'B2B_DEV_SECRET',
 };
 
+/** Postman variable -> .env key that replaces the committed value only when it is set. */
+const OVERRIDES_FROM_ENV: Record<string, string> = {
+  userPassword: 'SEED_USER_PASSWORD',
+};
+
 /** Backend .env first, then the Compose .env one level up. */
 const ENV_FILES = ['.env', '../.env'];
 
@@ -53,6 +58,8 @@ const local: EnvironmentFile = {
   ...env,
   name: `${env.name} (local)`,
   values: env.values.map((v) => {
+    const override = dotenv[OVERRIDES_FROM_ENV[v.key] ?? ''];
+    if (override) return { ...v, value: override };
     const envKey = SECRETS_FROM_ENV[v.key];
     if (!envKey) return v;
     const value = dotenv[envKey];
