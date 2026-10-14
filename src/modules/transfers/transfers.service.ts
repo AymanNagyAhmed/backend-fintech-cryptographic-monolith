@@ -11,11 +11,7 @@ import {
 import { UnsupportedCurrencyException } from '../../common/money/exceptions/unsupported-currency.exception.js';
 import { Money } from '../../common/money/money.js';
 import type { EnvironmentVariables } from '../../config/env.validation.js';
-import {
-  WalletStatus,
-  type Prisma,
-  type Transfer,
-} from '../../generated/prisma/client.js';
+import type { Prisma, Transfer } from '../../generated/prisma/client.js';
 import { sumTransfersOutToday } from '../../generated/prisma/sql.js';
 import { AccountNotActiveException } from '../ledger/exceptions/account-not-active.exception.js';
 import { LedgerService } from '../ledger/ledger.service.js';
@@ -46,7 +42,7 @@ const assertActive = (
   wallet: WalletView,
   field: 'fromWalletId' | 'toWalletId',
 ) => {
-  if (wallet.status !== WalletStatus.active)
+  if (wallet.status !== 'active')
     throw transferAccountNotActive(field, wallet.status);
 };
 
