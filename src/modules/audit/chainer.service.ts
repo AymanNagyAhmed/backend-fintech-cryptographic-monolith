@@ -19,7 +19,8 @@ export interface ChainerRunResult {
 
 /**
  * Drains context outboxes into `audit.audit_events` off the request path (2.2, 2.4, 2.5).
- * One writer per partition via `pg_try_advisory_xact_lock(hashtext(partition_key))` (A-B9.6).
+ * Single writer per partition: `pg_try_advisory_xact_lock(hashtext(partition_key))`
+ * (A-B9.6). Lock is transaction-scoped; on miss the outbox row is left unprocessed.
  */
 @Injectable()
 export class ChainerService {
