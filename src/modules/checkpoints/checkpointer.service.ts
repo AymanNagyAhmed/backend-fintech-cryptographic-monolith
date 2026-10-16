@@ -15,6 +15,7 @@ import {
   type SthPayload,
 } from './sth-payload.js';
 import { TsaService } from './tsa.service.js';
+import { WormService } from './worm.service.js';
 
 export interface CheckpointBuildResult {
   treeSize: number;
@@ -40,6 +41,7 @@ export class CheckpointerService {
     private readonly prisma: PrismaService,
     private readonly signer: SignerService,
     private readonly tsa: TsaService,
+    private readonly worm: WormService,
     config: ConfigService<EnvironmentVariables, true>,
   ) {
     this.keyRef = config.get('SIGNING_KEY_NAME', { infer: true });
@@ -117,6 +119,11 @@ export class CheckpointerService {
       } catch (err) {
         // STH is already durable; TSA can be retried later without blocking the chain
         this.logger.warn({ err, sthId: row.id }, 'TSA stamp failed; will retry');
+      }
+      try {
+        await this.worm.putBatch(treeSize);
+      } catch (err) {
+        this.logger.warn({ err, treeSize }, 'WORM put failed; will retry');
       }
       this.logger.log(
         { treeSize, rootHash, sthId: row.id },
