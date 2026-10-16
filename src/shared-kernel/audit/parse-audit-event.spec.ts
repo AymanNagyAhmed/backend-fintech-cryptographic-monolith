@@ -78,6 +78,7 @@ describe('parseAuditEvent', () => {
   it('lists every registered type in the allow-list', async () => {
     const { AUDIT_EVENT_SCHEMAS } = await import('./registry.js');
     expect(Object.keys(AUDIT_EVENT_SCHEMAS).sort()).toEqual([
+      'audit.access',
       'auth.user.login',
       'auth.user.registered',
       'payment.webhook.accepted',
@@ -85,4 +86,18 @@ describe('parseAuditEvent', () => {
       'wallet.created',
     ]);
   });
+
+  it('accepts audit.access.v1', () => {
+    expect(
+      parseAuditEvent({
+        type: 'audit.access',
+        schemaVersion: 1,
+        occurredAt,
+        actor,
+        operation: 'verify',
+        scope: 'all',
+      }),
+    ).toMatchObject({ type: 'audit.access', operation: 'verify' });
+  });
 });
+

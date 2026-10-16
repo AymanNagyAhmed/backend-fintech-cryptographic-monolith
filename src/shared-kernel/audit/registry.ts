@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import { AuditAccessV1Schema } from './schemas/audit.v1.js';
 import {
   AuthUserLoginV1Schema,
   AuthUserRegisteredV1Schema,
@@ -18,6 +19,7 @@ export const AUDIT_EVENT_SCHEMAS = {
   'wallet.created': { 1: WalletCreatedV1Schema },
   'transfer.completed': { 1: TransferCompletedV1Schema },
   'payment.webhook.accepted': { 1: PaymentWebhookAcceptedV1Schema },
+  'audit.access': { 1: AuditAccessV1Schema },
 } as const;
 
 export type AuditEventType = keyof typeof AUDIT_EVENT_SCHEMAS;
@@ -27,7 +29,9 @@ export type AuditEvent =
   | z.infer<typeof AuthUserLoginV1Schema>
   | z.infer<typeof WalletCreatedV1Schema>
   | z.infer<typeof TransferCompletedV1Schema>
-  | z.infer<typeof PaymentWebhookAcceptedV1Schema>;
+  | z.infer<typeof PaymentWebhookAcceptedV1Schema>
+  | z.infer<typeof AuditAccessV1Schema>;
+
 
 export function schemaOf(
   type: string,
