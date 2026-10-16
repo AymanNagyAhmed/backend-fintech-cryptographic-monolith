@@ -163,6 +163,23 @@ describe('Transfers API (e2e)', () => {
     });
     expect(row.ref).toMatch(/^transfer:/);
     expect(await prisma.ledgerEntry.count({ where: { ref: row.ref } })).toBe(2);
+    // Same transaction wrote ledger.outbox (A-B6.4 / A-B9.3); chainer has not claimed yet
+    const outbox = await prisma.ledgerOutbox.findMany({
+      where: {
+        processedAt: null,
+        payload: { path: ['transferId'], equals: row.id },
+      },
+    });
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0].payload).toMatchObject({
+      type: 'transfer.completed',
+      schemaVersion: 1,
+      transferId: row.id,
+      sourceWalletId: from,
+      destinationWalletId: to,
+      currency: 'AED',
+      amount: '12.50',
+    });
   });
 
   it('same request + same key 10 times: money moves once, identical responses (2.10, 2.17)', async () => {
