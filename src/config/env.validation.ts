@@ -3,6 +3,7 @@ import {
   IsIn,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
   IsUrl,
@@ -190,6 +191,14 @@ export class EnvironmentVariables {
   @Min(0)
   @Max(168)
   WITHDRAWAL_LARGE_DELAY_HOURS: number = 24;
+
+  // Max percent of liabilities that may sit in the hot wallet before alert (A-B13.4)
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  @Max(100)
+  HOT_WALLET_MAX_SHARE: number = 5;
 
   // Cron pattern (5 or 6 fields, UTC) of the nightly ledger reconciliation job
   @IsOptional()
