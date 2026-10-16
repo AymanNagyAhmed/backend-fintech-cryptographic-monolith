@@ -1,7 +1,16 @@
+import { ConfigService } from '@nestjs/config';
 import { generateKeyPairSync, sign, verify } from 'node:crypto';
+import type { EnvironmentVariables } from '../../config/env.validation.js';
+import { LocalTestSigner } from './adapters/local-test.signer.js';
 import { SignerContractException } from './exceptions/signer-contract.exception.js';
-import type { SignatureEnvelope, Signer } from './signer.js';
+import type { SignatureEnvelope, Signer, SigningAlg } from './signer.js';
 import { SignerService } from './signer.service.js';
+
+function configOf(alg: SigningAlg): ConfigService<EnvironmentVariables, true> {
+  return {
+    get: () => alg,
+  } as unknown as ConfigService<EnvironmentVariables, true>;
+}
 
 // Test double for an adapter: an Ed25519 key generated per run, never stored
 const { privateKey, publicKey } = generateKeyPairSync('ed25519');
@@ -18,7 +27,7 @@ const backend = {
   ),
 } satisfies Signer;
 
-const service = new SignerService(backend);
+const service = new SignerService(backend, configOf('ed25519'));
 const message = new TextEncoder().encode('tree_size=42');
 
 describe('SignerService', () => {
@@ -94,6 +103,36 @@ describe('SignerService', () => {
     });
     await expect(service.sign(message, 'audit-signing')).rejects.toThrow(
       /signed with other-key:v1, not a version of audit-signing/,
+    );
+  });
+
+  it('throws when the adapter alg does not match SIGNING_ALG', async () => {
+    const strict = new SignerService(backend, configOf('ml-dsa-65'));
+    await expect(strict.sign(message, 'audit-signing')).rejects.toThrow(
+      /signed with ed25519, configured SIGNING_ALG is ml-dsa-65/,
+    );
+  });
+
+  it('still verifies a registered alg after SIGNING_ALG switches', async () => {
+    const envelope = await service.sign(message, 'audit-signing');
+    const switched = new SignerService(backend, configOf('ml-dsa-65'));
+    expect(await switched.verify(message, envelope)).toBe(true);
+  });
+
+  it('after rotate to ml-dsa-65 by config, both old and new signatures verify', async () => {
+    // OpenBao has no ML-DSA; LocalTestSigner stands in for the crypto-agility switch (2.7).
+    const local = new LocalTestSigner('ed25519', 'test');
+    const ed = new SignerService(local, configOf('ed25519'));
+    const v1 = await ed.sign(message, 'audit-signing');
+    local.rotate('audit-signing', 'ml-dsa-65');
+    const pq = new SignerService(local, configOf('ml-dsa-65'));
+    const v2 = await pq.sign(message, 'audit-signing');
+    expect(v1).toMatchObject({ alg: 'ed25519', keyId: 'audit-signing:v1' });
+    expect(v2).toMatchObject({ alg: 'ml-dsa-65', keyId: 'audit-signing:v2' });
+    expect(await pq.verify(message, v1)).toBe(true);
+    expect(await pq.verify(message, v2)).toBe(true);
+    await expect(ed.sign(message, 'audit-signing')).rejects.toThrow(
+      /signed with ml-dsa-65, configured SIGNING_ALG is ed25519/,
     );
   });
 
