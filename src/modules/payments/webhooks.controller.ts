@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Headers,
   HttpCode,
   HttpStatus,
   Param,
@@ -91,9 +92,10 @@ export class WebhooksController {
   async receive(
     @Param('provider') provider: WebhookProvider,
     @Body() body: unknown,
+    @Headers(WEBHOOK_HEADERS.timestamp) timestamp: string,
     @Res({ passthrough: true }) res: Response,
   ): Promise<WebhookReceiptDto> {
-    const result = await this.payments.receive(provider, body);
+    const result = await this.payments.receive(provider, body, timestamp);
     if (result.replayed) res.setHeader(IDEMPOTENT_REPLAYED_HEADER, 'true');
     return result.body;
   }

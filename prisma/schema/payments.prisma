@@ -1,0 +1,47 @@
+enum WebhookOutcome {
+  credited
+  rejected
+  ignored
+
+  @@map("webhook_outcome")
+  @@schema("payments")
+}
+
+enum WebhookReviewStatus {
+  pending
+  resolved
+
+  @@map("webhook_review_status")
+  @@schema("payments")
+}
+
+// One row per provider event, written by the delivery that processed it, in the transaction of
+// its idempotency claim and deposit. Outlives the 30-day idempotency-key purge: a redelivery
+// after the purge answers from this row (same requestHash) instead of processing again.
+// payload keeps only allow-listed fields of the signed body (webhook-payload.ts).
+// signedAt is the x-timestamp header. Rejected events start with reviewStatus pending; the
+// review (pending -> resolved, reviewedAt, reviewedBy, reviewNote) is the only change allowed,
+// done as migrator until review endpoints exist (trigger; app_writer has no UPDATE).
+model WebhookEvent {
+  id            String               @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  provider      String               @db.VarChar(32)
+  eventId       String               @map("event_id") @db.VarChar(100)
+  type          String               @db.VarChar(100)
+  outcome       WebhookOutcome
+  reasonCode    String?              @map("reason_code") @db.VarChar(50)
+  reasonMessage String?              @map("reason_message") @db.VarChar(500)
+  requestHash   String               @map("request_hash") @db.Char(64)
+  payload       Json                 @db.JsonB
+  signedAt      DateTime             @map("signed_at") @db.Timestamptz(6)
+  receivedAt    DateTime             @default(now()) @map("received_at") @db.Timestamptz(6)
+  reviewStatus  WebhookReviewStatus? @map("review_status")
+  reviewedAt    DateTime?            @map("reviewed_at") @db.Timestamptz(6)
+  reviewedBy    String?              @map("reviewed_by") @db.VarChar(100)
+  reviewNote    String?              @map("review_note") @db.VarChar(1000)
+
+  @@unique([provider, eventId])
+  // Review queue: pending events, oldest first
+  @@index([reviewStatus, receivedAt])
+  @@map("webhook_events")
+  @@schema("payments")
+}

@@ -7,6 +7,7 @@ import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import { AppModule } from '../src/app.module.js';
 import { setupApp } from '../src/app.setup.js';
+import { canonicalJsonSha256 } from '../src/common/crypto/canonical-json.js';
 import type { EnvironmentVariables } from '../src/config/env.validation.js';
 import { PrismaService } from '../src/database/prisma.service.js';
 import { LedgerService } from '../src/modules/ledger/ledger.service.js';
@@ -77,6 +78,8 @@ describe('Payment webhooks (e2e)', () => {
   const entriesOf = (eventId: string) =>
     prisma.ledgerEntry.count({ where: { ref: `webhook:stripe:${eventId}` } });
   const eventIdOf = (body: string) => (JSON.parse(body) as { id: string }).id;
+  const storedEvents = (eventId: string) =>
+    prisma.webhookEvent.findMany({ where: { provider: 'stripe', eventId } });
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
@@ -260,6 +263,7 @@ describe('Payment webhooks (e2e)', () => {
       expect(new Set(all.map((r) => JSON.stringify(r.body.data))).size).toBe(1);
       expect(await balance(user, walletId)).toBe('250.00');
       expect(await entriesOf(eventIdOf(body))).toBe(2);
+      expect(await storedEvents(eventIdOf(body))).toHaveLength(1);
     });
 
     it('20 parallel first deliveries of one event: one deposit', async () => {
@@ -290,6 +294,7 @@ describe('Payment webhooks (e2e)', () => {
       }
       expect(await entriesOf(eventIdOf(body))).toBe(0);
       expect(await balance(user, walletId)).toBe('0.00');
+      expect(await storedEvents(eventIdOf(body))).toHaveLength(0);
 
       const res = await send(body).expect(200);
       expect(res.body.data.status).toBe('credited');
@@ -346,6 +351,15 @@ describe('Payment webhooks (e2e)', () => {
             where: { ref: `webhook:stripe:${eventIdOf(body)}` },
           }),
         ).toBeNull();
+        expect(await storedEvents(eventIdOf(body))).toMatchObject([
+          {
+            outcome: 'rejected',
+            reasonCode: code,
+            reasonMessage: first.body.data.reason.message,
+            reviewStatus: 'pending',
+            reviewedAt: null,
+          },
+        ]);
       };
       const setWalletStatus = (id: string, status: string) =>
         prisma.$executeRaw`
@@ -409,10 +423,127 @@ describe('Payment webhooks (e2e)', () => {
           code: 'INVALID_WEBHOOK_EVENT',
           details: [{ field }],
         });
+        expect(await storedEvents(id)).toHaveLength(0);
         // Nothing stored under the id: a corrected delivery is processed
         await send(depositBody(walletId, '5.00', 'AED', id)).expect(200);
         expect(await balance(user, walletId)).toBe('5.00');
       },
     );
+  });
+
+  describe('payments.webhook_events', () => {
+    let user: string;
+
+    beforeEach(async () => {
+      user = await newUser();
+    });
+
+    it('stores one row per event with the allow-listed payload and the signature time', async () => {
+      const walletId = await newWallet(user);
+      const id = newEventId();
+      const body = JSON.stringify({
+        id,
+        type: 'payment.succeeded',
+        created: 1760464800,
+        object: 'event',
+        livemode: false,
+        data: {
+          walletId,
+          amount: '3.50',
+          currency: 'AED',
+          customer: { email: 'alice@example.com' },
+          description: 'Order 42',
+        },
+      });
+      const ts = String(Math.floor(Date.now() / 1000) - 60);
+      await send(body, signWebhookHeaders(secret, body, ts)).expect(200);
+      await send(body).expect(200);
+      const rows = await storedEvents(id);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        type: 'payment.succeeded',
+        outcome: 'credited',
+        reasonCode: null,
+        requestHash: canonicalJsonSha256(JSON.parse(body)),
+        payload: {
+          id,
+          type: 'payment.succeeded',
+          created: 1760464800,
+          data: { walletId, amount: '3.50', currency: 'AED' },
+        },
+        signedAt: new Date(Number(ts) * 1000),
+        reviewStatus: null,
+      });
+      expect(JSON.stringify(rows[0].payload)).not.toMatch(/alice|Order 42/);
+    });
+
+    it('stores an ignored event without data', async () => {
+      const body = pingBody({ data: { secret: 'x' } });
+      await send(body).expect(200);
+      expect(await storedEvents(eventIdOf(body))).toMatchObject([
+        {
+          outcome: 'ignored',
+          payload: { id: eventIdOf(body), type: 'test.ping' },
+          reviewStatus: null,
+        },
+      ]);
+    });
+
+    describe('redelivery after the idempotency key was purged', () => {
+      // Same state as a purged key: the event row exists, the key does not
+      const storeWithoutKey = (
+        body: string,
+        outcome: 'rejected' | 'credited',
+      ) =>
+        prisma.webhookEvent.create({
+          data: {
+            provider: 'stripe',
+            eventId: eventIdOf(body),
+            type: 'payment.succeeded',
+            outcome,
+            ...(outcome === 'rejected' && {
+              reasonCode: 'ACCOUNT_FROZEN',
+              reasonMessage: 'The wallet is frozen.',
+              reviewStatus: 'pending' as const,
+            }),
+            requestHash: canonicalJsonSha256(JSON.parse(body)),
+            payload: { id: eventIdOf(body), type: 'payment.succeeded' },
+            signedAt: new Date(),
+          },
+        });
+
+      it('answers the stored rejection and never credits the now active wallet', async () => {
+        const walletId = await newWallet(user);
+        const body = depositBody(walletId, '9.00');
+        await storeWithoutKey(body, 'rejected');
+        const res = await send(body).expect(200);
+        expect(res.body.data).toEqual({
+          provider: 'stripe',
+          eventId: eventIdOf(body),
+          type: 'payment.succeeded',
+          status: 'rejected',
+          deposit: { walletId, amount: '9.00', currency: 'AED' },
+          reason: { code: 'ACCOUNT_FROZEN', message: 'The wallet is frozen.' },
+        });
+        expect(await balance(user, walletId)).toBe('0.00');
+        expect(await entriesOf(eventIdOf(body))).toBe(0);
+        expect(await storedEvents(eventIdOf(body))).toHaveLength(1);
+      });
+
+      it('answers 422 IDEMPOTENCY_KEY_REUSED for the same event id with another body', async () => {
+        const walletId = await newWallet(user);
+        const id = newEventId();
+        await storeWithoutKey(
+          depositBody(walletId, '9.00', 'AED', id),
+          'credited',
+        );
+        const res = await send(depositBody(walletId, '90.00', 'AED', id));
+        expect([res.status, res.body.error.code]).toEqual([
+          422,
+          'IDEMPOTENCY_KEY_REUSED',
+        ]);
+        expect(await balance(user, walletId)).toBe('0.00');
+      });
+    });
   });
 });

@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
+import { canonicalJsonSha256 } from '../../common/crypto/canonical-json.js';
 import { DomainException } from '../../common/exceptions/domain.exception.js';
+import { idempotencyKeyReused } from '../../common/idempotency/exceptions/idempotency.exceptions.js';
 import { IdempotencyService } from '../../common/idempotency/idempotency.service.js';
 import type { IdempotentResponse } from '../../common/idempotency/interfaces/idempotent-response.interface.js';
 import { InvalidAmountException } from '../../common/money/exceptions/invalid-amount.exception.js';
@@ -16,15 +18,18 @@ import { WebhookEventDto } from './dto/webhook-event.dto.js';
 import type {
   DepositRejectionCode,
   WebhookDepositDto,
+  WebhookOutcome,
   WebhookReceiptDto,
+  WebhookRejectionDto,
 } from './dto/webhook-receipt.dto.js';
 import {
   depositsUnavailable,
   invalidWebhookEvent,
 } from './exceptions/webhook.exceptions.js';
+import { WebhookEventsService } from './webhook-events.service.js';
+import { PAYMENT_SUCCEEDED, redactWebhookPayload } from './webhook-payload.js';
 import type { WebhookProvider } from './webhook-providers.js';
-
-export const PAYMENT_SUCCEEDED = 'payment.succeeded';
+import { webhookSignedAt } from './webhook-signature.js';
 
 /** Ledger ref of a deposit: the postings PK is a second guard against crediting an event twice. */
 export const depositRef = (provider: WebhookProvider, eventId: string) =>
@@ -44,34 +49,52 @@ interface Deposit {
   amount: Money;
 }
 
+interface Delivery {
+  provider: WebhookProvider;
+  event: WebhookEventDto;
+  deposit: Deposit | undefined;
+  body: Record<string, unknown>;
+  signedAt: Date;
+}
+
 @Injectable()
 export class PaymentsService {
   constructor(
     private readonly idempotency: IdempotencyService,
     private readonly ledger: LedgerService,
     private readonly wallets: WalletsService,
+    private readonly webhookEvents: WebhookEventsService,
   ) {}
 
   /**
-   * Called after WebhookSignatureGuard, so `body` is exactly what the provider signed. One
-   * runOnce per (provider, event id) (2.17): the first delivery credits the wallet against the
-   * provider's clearing account, or stores why it cannot; every redelivery, also a concurrent
-   * one, replays that receipt. The same event id with another body is 422 IDEMPOTENCY_KEY_REUSED.
+   * Called after WebhookSignatureGuard, so `body` is exactly what the provider signed and
+   * `timestamp` is its checked x-timestamp header. One runOnce per (provider, event id) (2.17):
+   * the first delivery credits the wallet against the provider's clearing account, or stores
+   * why it cannot; every redelivery, also a concurrent one, replays that receipt. The same
+   * event id with another body is 422 IDEMPOTENCY_KEY_REUSED.
    */
   async receive(
     provider: WebhookProvider,
     body: unknown,
+    timestamp: string,
   ): Promise<IdempotentResponse<WebhookReceiptDto>> {
     const event = this.parseEvent(body);
     const deposit =
       event.type === PAYMENT_SUCCEEDED
         ? this.parseDeposit(event.data)
         : undefined;
+    const delivery: Delivery = {
+      provider,
+      event,
+      deposit,
+      body: body as Record<string, unknown>,
+      signedAt: webhookSignedAt(timestamp),
+    };
     return this.idempotency.runOnce(
       `webhook:${provider}`,
       event.id,
       body,
-      (tx) => this.process(tx, provider, event, deposit),
+      (tx) => this.processOnce(tx, delivery),
     );
   }
 
@@ -98,30 +121,46 @@ export class PaymentsService {
     }
   }
 
+  /**
+   * The webhook_events row outlives the idempotency key (purged after 30 days): a redelivery
+   * after the purge answers from the row and is never processed again, so a rejected deposit
+   * cannot be credited later without a review.
+   */
+  private async processOnce(
+    tx: Prisma.TransactionClient,
+    delivery: Delivery,
+  ): Promise<WebhookReceiptDto> {
+    const { provider, event, body } = delivery;
+    const requestHash = canonicalJsonSha256(body);
+    const stored = await this.webhookEvents.find(tx, provider, event.id);
+    if (stored) {
+      if (stored.requestHash !== requestHash) throw idempotencyKeyReused();
+      return receiptOf(delivery, stored.outcome, stored.reason);
+    }
+    const receipt = await this.process(tx, delivery);
+    await this.webhookEvents.record(tx, {
+      provider,
+      eventId: event.id,
+      type: event.type,
+      outcome: receipt.status,
+      reason: receipt.reason,
+      requestHash,
+      payload: redactWebhookPayload(body, event.type),
+      signedAt: delivery.signedAt,
+    });
+    return receipt;
+  }
+
   private async process(
     tx: Prisma.TransactionClient,
-    provider: WebhookProvider,
-    event: WebhookEventDto,
-    deposit: Deposit | undefined,
+    delivery: Delivery,
   ): Promise<WebhookReceiptDto> {
-    const base = { provider, eventId: event.id, type: event.type };
-    if (!deposit) return { ...base, status: 'ignored' };
+    const { provider, event, deposit } = delivery;
+    if (!deposit) return receiptOf(delivery, 'ignored');
 
     const { amount } = deposit;
-    const requested: WebhookDepositDto = {
-      walletId: deposit.walletId,
-      amount: amount.toString(),
-      currency: amount.currency,
-    };
-    const rejected = (
-      code: DepositRejectionCode,
-      message: string,
-    ): WebhookReceiptDto => ({
-      ...base,
-      status: 'rejected',
-      deposit: requested,
-      reason: { code, message },
-    });
+    const rejected = (code: DepositRejectionCode, message: string) =>
+      receiptOf(delivery, 'rejected', { code, message });
 
     const wallet = await this.wallets.findById(deposit.walletId, tx);
     if (!wallet)
@@ -165,15 +204,35 @@ export class PaymentsService {
         await tx.$executeRaw`ROLLBACK TO SAVEPOINT webhook_deposit`;
         return rejected(notActiveCode(e.status), `The wallet is ${e.status}.`);
       }
-      // Credited before and its idempotency key purged (older than 30 days)
+      // Credited before webhook_events existed and its idempotency key purged
       if (e instanceof DomainException && e.code === 'POSTING_EXISTS') {
         await tx.$executeRaw`ROLLBACK TO SAVEPOINT webhook_deposit`;
-        return { ...base, status: 'credited', deposit: requested };
+        return receiptOf(delivery, 'credited');
       }
       throw e;
     }
-    return { ...base, status: 'credited', deposit: requested };
+    return receiptOf(delivery, 'credited');
   }
+}
+
+function receiptOf(
+  { provider, event, deposit }: Delivery,
+  status: WebhookOutcome,
+  reason?: WebhookRejectionDto,
+): WebhookReceiptDto {
+  const requested: WebhookDepositDto | undefined = deposit && {
+    walletId: deposit.walletId,
+    amount: deposit.amount.toString(),
+    currency: deposit.amount.currency,
+  };
+  return {
+    provider,
+    eventId: event.id,
+    type: event.type,
+    status,
+    ...(requested && { deposit: requested }),
+    ...(reason && { reason }),
+  };
 }
 
 function validated<T extends object>(
