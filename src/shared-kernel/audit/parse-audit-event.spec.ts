@@ -81,6 +81,7 @@ describe('parseAuditEvent', () => {
       'audit.access',
       'auth.user.login',
       'auth.user.registered',
+      'erasure.completed',
       'payment.webhook.accepted',
       'transfer.completed',
       'wallet.created',

@@ -13,3 +13,18 @@ model SubjectPii {
   @@map("subject_pii")
   @@schema("privacy")
 }
+
+// Four-eyes erasure requests (A-B11.3). Completing requires a second distinct approver.
+model ErasureRequest {
+  id          String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  subjectRef  String    @map("subject_ref") @db.Uuid
+  requesterId String    @map("requester_id") @db.Uuid
+  approverId  String?   @map("approver_id") @db.Uuid
+  status      String    @db.VarChar(32)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
+
+  @@index([subjectRef, status])
+  @@map("erasure_requests")
+  @@schema("privacy")
+}
