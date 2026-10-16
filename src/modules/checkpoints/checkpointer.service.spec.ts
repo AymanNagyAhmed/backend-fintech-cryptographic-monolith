@@ -1,12 +1,21 @@
+import type { ConfigService } from '@nestjs/config';
+import type { EnvironmentVariables } from '../../config/env.validation.js';
+import type { SignerService } from '../crypto/signer.service.js';
 import { CheckpointerService } from './checkpointer.service.js';
 import { auditLeafDigest, merkleHashToHex, merkleRoot } from './merkle.js';
 
 describe('CheckpointerService', () => {
+  const config = {
+    get: () => 'audit-signing',
+  } as unknown as ConfigService<EnvironmentVariables, true>;
+
   it('returns empty when there are no audit events', async () => {
     const prisma = {
       auditEvent: { findMany: vi.fn().mockResolvedValue([]) },
+      treeHead: { findFirst: vi.fn() },
     };
-    const service = new CheckpointerService(prisma as never);
+    const signer = { sign: vi.fn() } as unknown as SignerService;
+    const service = new CheckpointerService(prisma as never, signer, config);
     await expect(service.build()).resolves.toEqual({
       treeSize: 0,
       rootHash: '',
@@ -14,32 +23,76 @@ describe('CheckpointerService', () => {
       toEventId: null,
       empty: true,
     });
+    expect(signer.sign).not.toHaveBeenCalled();
   });
 
-  it('builds a root over ordered leaf hashes', async () => {
+  it('skips signing when an STH already covers this tree size', async () => {
     const rows = [
       { id: 'e1', hash: 'aa'.repeat(32) },
       { id: 'e2', hash: 'bb'.repeat(32) },
     ];
     const prisma = {
       auditEvent: { findMany: vi.fn().mockResolvedValue(rows) },
+      treeHead: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: 'sth1',
+          treeSize: 2,
+          rootHash: 'cc'.repeat(32),
+        }),
+        create: vi.fn(),
+      },
     };
-    const service = new CheckpointerService(prisma as never);
+    const signer = { sign: vi.fn() } as unknown as SignerService;
+    const service = new CheckpointerService(prisma as never, signer, config);
     const result = await service.build();
-    const expected = merkleRoot(
-      rows.map((r) => auditLeafDigest(r.hash)),
-      true,
+    expect(result.skipped).toBe(true);
+    expect(result.sthId).toBe('sth1');
+    expect(signer.sign).not.toHaveBeenCalled();
+    expect(prisma.treeHead.create).not.toHaveBeenCalled();
+  });
+
+  it('signs and stores a new STH when the tree grew', async () => {
+    const rows = [
+      { id: 'e1', hash: 'aa'.repeat(32) },
+      { id: 'e2', hash: 'bb'.repeat(32) },
+    ];
+    const expectedRoot = merkleHashToHex(
+      merkleRoot(
+        rows.map((r) => auditLeafDigest(r.hash)),
+        true,
+      ),
     );
-    expect(result).toEqual({
+    const prisma = {
+      auditEvent: { findMany: vi.fn().mockResolvedValue(rows) },
+      treeHead: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockResolvedValue({ id: 'sth-new' }),
+      },
+    };
+    const signer = {
+      sign: vi.fn().mockResolvedValue({
+        alg: 'ed25519',
+        keyId: 'audit-signing:v1',
+        sig: 'dGVzdA==',
+      }),
+    } as unknown as SignerService;
+    const service = new CheckpointerService(prisma as never, signer, config);
+    const result = await service.build();
+    expect(result).toMatchObject({
       treeSize: 2,
-      rootHash: merkleHashToHex(expected),
-      fromEventId: 'e1',
-      toEventId: 'e2',
+      rootHash: expectedRoot,
+      sthId: 'sth-new',
       empty: false,
     });
-    expect(prisma.auditEvent.findMany).toHaveBeenCalledWith({
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      select: { id: true, hash: true },
+    expect(signer.sign).toHaveBeenCalledOnce();
+    expect(prisma.treeHead.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        treeSize: 2,
+        rootHash: expectedRoot,
+        alg: 'ed25519',
+        keyId: 'audit-signing:v1',
+        previousSthHash: null,
+      }),
     });
   });
 });

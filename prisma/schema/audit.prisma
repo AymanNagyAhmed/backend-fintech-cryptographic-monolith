@@ -19,3 +19,24 @@ model AuditEvent {
   @@map("audit_events")
   @@schema("audit")
 }
+
+// Signed tree heads (STH) over the global Merkle tree of audit leaves (A-B10.2).
+// tree_size is the number of leaves covered; UNIQUE so checkpoints never fork silently.
+model TreeHead {
+  id              String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  treeSize        Int       @map("tree_size")
+  rootHash        String    @map("root_hash") @db.Char(64)
+  timestamp       DateTime  @db.Timestamptz(6)
+  previousSthHash String?   @map("previous_sth_hash") @db.Char(64)
+  alg             String    @db.VarChar(32)
+  keyId           String    @map("key_id") @db.VarChar(128)
+  signature       String    @db.Text
+  // Filled in A-B10.5 (RFC 3161); null until the TSA token is stored
+  tsaToken        Bytes?    @map("tsa_token")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([treeSize])
+  @@index([createdAt])
+  @@map("tree_heads")
+  @@schema("audit")
+}
