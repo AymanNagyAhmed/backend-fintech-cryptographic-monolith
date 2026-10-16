@@ -7,6 +7,7 @@ import { CheckpointerService } from './checkpointer.service.js';
 import { ProofsService } from './proofs.service.js';
 import { SthService } from './sth.service.js';
 import { TsaService } from './tsa.service.js';
+import { WitnessService } from './witness.service.js';
 import { WormService } from './worm.service.js';
 
 @Module({
@@ -18,6 +19,7 @@ import { WormService } from './worm.service.js';
     SthService,
     TsaService,
     WormService,
+    WitnessService,
   ],
   exports: [
     CheckpointerService,
@@ -25,6 +27,7 @@ import { WormService } from './worm.service.js';
     SthService,
     TsaService,
     WormService,
+    WitnessService,
   ],
 })
 export class CheckpointsModule {}
