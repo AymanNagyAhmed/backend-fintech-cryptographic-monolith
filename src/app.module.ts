@@ -26,6 +26,7 @@ import { LedgerModule } from './modules/ledger/ledger.module.js';
 import { TransfersModule } from './modules/transfers/transfers.module.js';
 import { PaymentsModule } from './modules/payments/payments.module.js';
 import { CryptoModule } from './modules/crypto/crypto.module.js';
+import { OutboxModule } from './modules/outbox/outbox.module.js';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { CryptoModule } from './modules/crypto/crypto.module.js';
     WalletsModule,
     LedgerModule,
     LedgerJobsModule,
+    OutboxModule,
     TransfersModule,
     PaymentsModule,
     CryptoModule,

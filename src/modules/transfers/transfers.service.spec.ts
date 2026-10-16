@@ -4,9 +4,14 @@ import type { EnvironmentVariables } from '../../config/env.validation.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { AccountNotActiveException } from '../ledger/exceptions/account-not-active.exception.js';
 import type { LedgerService } from '../ledger/ledger.service.js';
+import type { OutboxService } from '../outbox/outbox.service.js';
 import type { WalletsService } from '../wallets/wallets.service.js';
 import type { CreateTransferDto } from './dto/create-transfer.dto.js';
 import { TransfersService } from './transfers.service.js';
+
+vi.mock('../../common/request-context.js', () => ({
+  getRequestId: vi.fn(() => 'req_transfer_test'),
+}));
 
 describe('TransfersService.create', () => {
   const userId = 'u1';
@@ -33,6 +38,7 @@ describe('TransfersService.create', () => {
   let post: ReturnType<typeof vi.fn>;
   let findOwned: ReturnType<typeof vi.fn>;
   let findById: ReturnType<typeof vi.fn>;
+  let enqueue: ReturnType<typeof vi.fn>;
   let service: TransfersService;
 
   beforeEach(() => {
@@ -52,6 +58,7 @@ describe('TransfersService.create', () => {
     post = vi.fn().mockResolvedValue({});
     findOwned = vi.fn().mockResolvedValue(wallet('w-from'));
     findById = vi.fn().mockResolvedValue(wallet('w-to'));
+    enqueue = vi.fn().mockResolvedValue('out-1');
     tx.transfer.create.mockImplementation(({ data }: { data: object }) => ({
       id: 't1',
       createdAt: new Date('2026-10-14T18:30:00Z'),
@@ -63,6 +70,7 @@ describe('TransfersService.create', () => {
       { runOnce } as unknown as IdempotencyService,
       { post } as unknown as LedgerService,
       { findOwned, findById } as unknown as WalletsService,
+      { enqueue } as unknown as OutboxService,
       { get: (key: string) => limits[key] } as unknown as ConfigService<
         EnvironmentVariables,
         true
@@ -104,6 +112,18 @@ describe('TransfersService.create', () => {
         initiatorUserId: userId,
       },
     });
+    expect(enqueue).toHaveBeenCalledWith(tx, 'ledger', {
+      type: 'transfer.completed',
+      schemaVersion: 1,
+      occurredAt: '2026-10-14T18:30:00.000Z',
+      actor: { subjectRef: userId },
+      requestId: 'req_transfer_test',
+      transferId: 't1',
+      sourceWalletId: 'w-from',
+      destinationWalletId: 'w-to',
+      currency: 'AED',
+      amount: '10.50',
+    });
     expect(body).toEqual({
       id: 't1',
       fromWalletId: 'w-from',
@@ -113,6 +133,16 @@ describe('TransfersService.create', () => {
       status: 'COMPLETED',
       createdAt: '2026-10-14T18:30:00.000Z',
     });
+  });
+
+  it('does not enqueue when the transfer row is never written', async () => {
+    post.mockRejectedValue(
+      Object.assign(new Error('funds'), { code: 'INSUFFICIENT_FUNDS' }),
+    );
+    await expect(service.create(userId, 'k', dto)).rejects.toMatchObject({
+      code: 'INSUFFICIENT_FUNDS',
+    });
+    expect(enqueue).not.toHaveBeenCalled();
   });
 
   it.each([

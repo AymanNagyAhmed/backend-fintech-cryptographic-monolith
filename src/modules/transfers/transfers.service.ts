@@ -13,8 +13,10 @@ import { Money } from '../../common/money/money.js';
 import type { EnvironmentVariables } from '../../config/env.validation.js';
 import type { Prisma, Transfer } from '../../generated/prisma/client.js';
 import { sumTransfersOutToday } from '../../generated/prisma/sql.js';
+import { getRequestId } from '../../common/request-context.js';
 import { AccountNotActiveException } from '../ledger/exceptions/account-not-active.exception.js';
 import { LedgerService } from '../ledger/ledger.service.js';
+import { OutboxService } from '../outbox/outbox.service.js';
 import type { WalletView } from '../wallets/wallets.service.js';
 import { WalletsService } from '../wallets/wallets.service.js';
 import type { CreateTransferDto } from './dto/create-transfer.dto.js';
@@ -54,6 +56,7 @@ export class TransfersService {
     private readonly idempotency: IdempotencyService,
     private readonly ledger: LedgerService,
     private readonly wallets: WalletsService,
+    private readonly outbox: OutboxService,
     config: ConfigService<EnvironmentVariables, true>,
   ) {
     this.dailyLimits = Object.fromEntries(
@@ -69,9 +72,9 @@ export class TransfersService {
 
   /**
    * POST /transfers. Keys are scoped per caller, so two users' keys never meet. Claim, posting
-   * (locks, funds check, entries, balances), daily limit, transfer row and stored response
-   * commit in one transaction: a retry with the same key replays the 201, a failed attempt
-   * leaves nothing.
+   * (locks, funds check, entries, balances), daily limit, transfer row, ledger.outbox row and
+   * stored response commit in one transaction: a retry with the same key replays the 201, a
+   * failed attempt leaves nothing (A-B6.4 / A-B9.3).
    */
   create(
     userId: string,
@@ -148,7 +151,21 @@ export class TransfersService {
         initiatorUserId: userId,
       },
     });
-    return toDto(row, amount.currency);
+    const dtoOut = toDto(row, amount.currency);
+    const requestId = getRequestId();
+    await this.outbox.enqueue(tx, 'ledger', {
+      type: 'transfer.completed',
+      schemaVersion: 1,
+      occurredAt: dtoOut.createdAt,
+      actor: { subjectRef: userId },
+      ...(requestId !== undefined ? { requestId } : {}),
+      transferId: row.id,
+      sourceWalletId: from.id,
+      destinationWalletId: to.id,
+      currency: amount.currency,
+      amount: amount.toString(),
+    });
+    return dtoOut;
   }
 
   private async assertWithinDailyLimit(
