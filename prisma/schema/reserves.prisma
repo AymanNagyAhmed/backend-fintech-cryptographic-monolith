@@ -1,0 +1,45 @@
+// Proof of reserves (A-B13.5, 2.14). One row per currency and day: the published root of the
+// Merkle-sum tree over client balances plus total liabilities (= the root's sum). Immutable
+// (trigger in the migration). rootHash is lowercase hex SHA-256; totalLiabilities has the
+// currency scale. snapshotDate is the UTC day the snapshot covers: one per currency and day.
+model ReservesSnapshot {
+  id               String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  currency         String   @db.VarChar(10)
+  snapshotDate     DateTime @map("snapshot_date") @db.Date
+  treeSize         Int      @map("tree_size")
+  rootHash         String   @map("root_hash") @db.Char(64)
+  totalLiabilities Decimal  @map("total_liabilities") @db.Decimal(20, 8)
+  publishedAt      DateTime @default(now()) @map("published_at") @db.Timestamptz(6)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  leaves ReservesLeaf[]
+
+  @@unique([currency, snapshotDate])
+  @@index([currency, publishedAt])
+  @@map("snapshots")
+  @@schema("reserves")
+}
+
+// One leaf per client with a positive balance in the snapshot's currency (users summed over
+// their wallets). leafHash = H(0x00 || userId|currency|balance|salt); the random salt hides
+// the leaf from everyone but its owner. Kept so GET /reserves/proof/me can return leaf, salt
+// and path (A-B13.6). userId is a plain UUID, no FK across schemas.
+model ReservesLeaf {
+  id         String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  snapshotId String   @map("snapshot_id") @db.Uuid
+  leafIndex  Int      @map("leaf_index")
+  userId     String   @map("user_id") @db.Uuid
+  balance    Decimal  @db.Decimal(20, 8)
+  salt       String   @db.Char(32)
+  leafHash   String   @map("leaf_hash") @db.Char(64)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  snapshot ReservesSnapshot @relation(fields: [snapshotId], references: [id])
+
+  @@unique([snapshotId, leafIndex])
+  @@unique([snapshotId, userId])
+  // Latest proof of one user: newest snapshot first
+  @@index([userId, snapshotId])
+  @@map("leaves")
+  @@schema("reserves")
+}

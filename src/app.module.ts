@@ -35,6 +35,7 @@ import { PrivacyModule } from './modules/privacy/privacy.module.js';
 import { PrivacyJobsModule } from './modules/privacy/jobs/privacy-jobs.module.js';
 import { ComplianceModule } from './modules/compliance/compliance.module.js';
 import { WithdrawalsModule } from './modules/withdrawals/withdrawals.module.js';
+import { ReservesModule } from './modules/reserves/reserves.module.js';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { WithdrawalsModule } from './modules/withdrawals/withdrawals.module.js';
     ComplianceModule,
     WithdrawalsModule,
     IdempotencyJobsModule,
+    ReservesModule,
   ],
   controllers: [AppController],
   providers: [
