@@ -27,11 +27,12 @@ describe('TransfersService.create', () => {
     status,
     ledgerAccountId: `acc-${id}`,
   });
-  const limits: Record<string, string> = {
+  const limits: Record<string, string | number> = {
     TRANSFER_DAILY_LIMIT_AED: '100.00',
     TRANSFER_DAILY_LIMIT_USD: '15000.00',
     TRANSFER_DAILY_LIMIT_EUR: '15000.00',
     TRANSFER_DAILY_LIMIT_BTC: '1.00000000',
+    AUDIT_PARTITION_COUNT: 16,
   };
   const tx = { transfer: { create: vi.fn() }, $queryRawTyped: vi.fn() };
   let runOnce: ReturnType<typeof vi.fn>;
@@ -118,12 +119,15 @@ describe('TransfersService.create', () => {
       occurredAt: '2026-10-14T18:30:00.000Z',
       actor: { subjectRef: userId },
       requestId: 'req_transfer_test',
+      partitionKey: expect.stringMatching(/^\d+$/),
       transferId: 't1',
       sourceWalletId: 'w-from',
       destinationWalletId: 'w-to',
       currency: 'AED',
       amount: '10.50',
     });
+    const enqueued = enqueue.mock.calls[0][2] as { partitionKey: string };
+    expect(Number(enqueued.partitionKey)).toBeLessThan(16);
     expect(body).toEqual({
       id: 't1',
       fromWalletId: 'w-from',

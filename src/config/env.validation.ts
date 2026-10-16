@@ -154,6 +154,14 @@ export class EnvironmentVariables {
   @Min(1)
   OUTBOX_LAG_ALERT_THRESHOLD: number = 1000;
 
+  // How many logical hash-chain partitions audit events are hashed into (A-B9.10 k6: 1, 4, 16)
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(256)
+  AUDIT_PARTITION_COUNT: number = 16;
+
   @IsString()
   @MinLength(32)
   @NotEquals(PLACEHOLDER)
