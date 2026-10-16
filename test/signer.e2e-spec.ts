@@ -1,19 +1,31 @@
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
-import { validate } from '../src/config/env.validation.js';
+import {
+  validate,
+  type EnvironmentVariables,
+} from '../src/config/env.validation.js';
 import { OpenBaoTransitSigner } from '../src/modules/crypto/adapters/openbao-transit.signer.js';
 import { CryptoModule } from '../src/modules/crypto/crypto.module.js';
 import { KeyStoreException } from '../src/modules/crypto/exceptions/key-store.exception.js';
 import { SignerContractException } from '../src/modules/crypto/exceptions/signer-contract.exception.js';
-import type { SignatureEnvelope } from '../src/modules/crypto/signer.js';
+import type {
+  SignatureEnvelope,
+  SigningAlg,
+} from '../src/modules/crypto/signer.js';
 import { SignerService } from '../src/modules/crypto/signer.service.js';
+
+function configOf(alg: SigningAlg): ConfigService<EnvironmentVariables, true> {
+  return {
+    get: () => alg,
+  } as unknown as ConfigService<EnvironmentVariables, true>;
+}
 
 // Needs the Compose OpenBao (`make up`) with Transit enabled (plan A-B1.9) and BAO_TOKEN =
 // the dev root token in .env (SIGNER_BACKEND=openbao). Creates its own keys and deletes them.
 describe('Signer with OpenBao Transit (e2e)', () => {
   let moduleRef: TestingModule;
-  let signer: SignerService;
+  let openbao: OpenBaoTransitSigner;
   const created: string[] = [];
   const message = new TextEncoder().encode(`checkpoint ${randomUUID()}`);
 
@@ -52,7 +64,10 @@ describe('Signer with OpenBao Transit (e2e)', () => {
         CryptoModule,
       ],
     }).compile();
-    signer = moduleRef.get(SignerService);
+    openbao = new OpenBaoTransitSigner(
+      process.env.BAO_ADDR ?? '',
+      process.env.BAO_TOKEN ?? '',
+    );
   });
 
   afterAll(async () => {
@@ -66,10 +81,13 @@ describe('Signer with OpenBao Transit (e2e)', () => {
   });
 
   describe.each(['ed25519', 'ecdsa-p256'] as const)('%s key', (type) => {
+    let signer: SignerService;
     let key: string;
     let v1: SignatureEnvelope;
 
     beforeAll(async () => {
+      // New signatures must match SIGNING_ALG; OpenBao has no ML-DSA key type.
+      signer = new SignerService(openbao, configOf(type));
       key = await newKey(type);
       v1 = await signer.sign(message, key);
     });
@@ -108,7 +126,24 @@ describe('Signer with OpenBao Transit (e2e)', () => {
     });
   });
 
+  it('refuses to sign when the key alg does not match SIGNING_ALG', async () => {
+    const key = await newKey('ecdsa-p256');
+    const signer = new SignerService(openbao, configOf('ed25519'));
+    await expect(signer.sign(message, key)).rejects.toThrow(
+      /signed with ecdsa-p256, configured SIGNING_ALG is ed25519/,
+    );
+  });
+
+  it('still verifies after SIGNING_ALG switches to another registered alg', async () => {
+    const key = await newKey('ed25519');
+    const ed = new SignerService(openbao, configOf('ed25519'));
+    const envelope = await ed.sign(message, key);
+    const switched = new SignerService(openbao, configOf('ecdsa-p256'));
+    expect(await switched.verify(message, envelope)).toBe(true);
+  });
+
   it('verifies false for a key that does not exist', async () => {
+    const signer = new SignerService(openbao, configOf('ed25519'));
     const key = await newKey('ed25519');
     const signature = await signer.sign(message, key);
     expect(
@@ -117,6 +152,7 @@ describe('Signer with OpenBao Transit (e2e)', () => {
   });
 
   it('refuses to sign with a missing key or a non-signing key', async () => {
+    const signer = new SignerService(openbao, configOf('ed25519'));
     await expect(signer.sign(message, 'e2e-missing')).rejects.toThrow(
       'Transit key e2e-missing not found',
     );
@@ -129,6 +165,7 @@ describe('Signer with OpenBao Transit (e2e)', () => {
   it('throws KeyStoreException, not false, when OpenBao is unreachable', async () => {
     const down = new SignerService(
       new OpenBaoTransitSigner('http://127.0.0.1:1', 'x'.repeat(20)),
+      configOf('ed25519'),
     );
     await expect(
       down.verify(message, {
@@ -143,18 +180,31 @@ describe('Signer with OpenBao Transit (e2e)', () => {
     const key = await newKey('ed25519');
     const denied = new SignerService(
       new OpenBaoTransitSigner(process.env.BAO_ADDR ?? '', 'x'.repeat(20)),
+      configOf('ed25519'),
     );
     await expect(denied.sign(message, key)).rejects.toThrow(/HTTP 403/);
   });
 
   it('never returns a signature from an adapter that breaks the contract', async () => {
-    const lying = new SignerService({
-      sign: () =>
-        Promise.resolve({ alg: 'ed25519', keyId: 'other:v1', sig: 'AA==' }),
-      verify: () => Promise.resolve(true),
-    });
+    const lying = new SignerService(
+      {
+        sign: () =>
+          Promise.resolve({ alg: 'ed25519', keyId: 'other:v1', sig: 'AA==' }),
+        verify: () => Promise.resolve(true),
+      },
+      configOf('ed25519'),
+    );
     await expect(lying.sign(message, 'audit-signing')).rejects.toThrow(
       SignerContractException,
     );
+  });
+
+  it('loads SignerService from CryptoModule with SIGNING_ALG from env', async () => {
+    const signer = moduleRef.get(SignerService);
+    const key = await newKey('ed25519');
+    // .env SIGNING_ALG=ed25519; a matching OpenBao key signs through the Nest wiring
+    const envelope = await signer.sign(message, key);
+    expect(envelope.alg).toBe('ed25519');
+    expect(await signer.verify(message, envelope)).toBe(true);
   });
 });

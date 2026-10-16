@@ -3,6 +3,7 @@ import {
   verify as nodeVerify,
   type KeyObject,
 } from 'node:crypto';
+import { algorithmOf } from './algorithm-registry.js';
 import type { SigningAlg } from './signer.js';
 
 /** The algorithm a public or private key is for, or null for any other key. */
@@ -21,9 +22,6 @@ export function algOfKey(key: KeyObject): SigningAlg | null {
   }
 }
 
-// ECDSA hashes with SHA-256 and uses DER; Ed25519 and ML-DSA sign the message itself
-const digestOf = (alg: SigningAlg) => (alg === 'ecdsa-p256' ? 'sha256' : null);
-
 /** Signs with a private key in this process: LocalTestSigner only, never production keys. */
 export function signDetached(
   alg: SigningAlg,
@@ -32,7 +30,7 @@ export function signDetached(
 ): Buffer {
   if (algOfKey(privateKey) !== alg)
     throw new Error(`The key is not an ${alg} key`);
-  return nodeSign(digestOf(alg), bytes, {
+  return nodeSign(algorithmOf(alg).digest, bytes, {
     key: privateKey,
     dsaEncoding: 'der',
   });
@@ -48,7 +46,7 @@ export function verifyDetached(
   if (algOfKey(publicKey) !== alg) return false;
   try {
     return nodeVerify(
-      digestOf(alg),
+      algorithmOf(alg).digest,
       bytes,
       { key: publicKey, dsaEncoding: 'der' },
       signature,

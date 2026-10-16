@@ -1,4 +1,5 @@
 import type { SIGNING_ALGS } from '../../config/env.validation.js';
+import { ALGORITHM_REGISTRY } from './algorithm-registry.js';
 
 export type SigningAlg = (typeof SIGNING_ALGS)[number];
 
@@ -6,7 +7,7 @@ export type SigningAlg = (typeof SIGNING_ALGS)[number];
  * A detached signature as every signed artifact stores it (2.6, 2.7): which algorithm, which
  * key version (`<keyRef>:v<version>`, key-id.ts) and the signature bytes, standard base64.
  * ed25519: 64 raw bytes over the message; ecdsa-p256: ASN.1 DER over SHA-256 of the message;
- * ml-dsa-65: 3309 bytes (FIPS 204).
+ * ml-dsa-65: 3309 bytes (FIPS 204). Lengths live in ALGORITHM_REGISTRY.
  */
 export interface SignatureEnvelope {
   alg: SigningAlg;
@@ -33,7 +34,7 @@ export const SIGNER_BACKEND = Symbol('SIGNER_BACKEND');
 export const SIGNATURE_BYTES: Readonly<
   Record<SigningAlg, { min: number; max: number }>
 > = {
-  ed25519: { min: 64, max: 64 },
-  'ecdsa-p256': { min: 8, max: 72 },
-  'ml-dsa-65': { min: 3309, max: 3309 },
+  ed25519: ALGORITHM_REGISTRY.ed25519.signatureBytes,
+  'ecdsa-p256': ALGORITHM_REGISTRY['ecdsa-p256'].signatureBytes,
+  'ml-dsa-65': ALGORITHM_REGISTRY['ml-dsa-65'].signatureBytes,
 };
