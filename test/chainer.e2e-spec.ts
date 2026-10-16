@@ -5,7 +5,10 @@ import { validate } from '../src/config/env.validation.js';
 import { DatabaseModule } from '../src/database/database.module.js';
 import { PrismaService } from '../src/database/prisma.service.js';
 import { AuditModule } from '../src/modules/audit/audit.module.js';
-import { GENESIS_PREV_HASH, chainHash } from '../src/modules/audit/chain-hash.js';
+import {
+  GENESIS_PREV_HASH,
+  chainHash,
+} from '../src/modules/audit/chain-hash.js';
 import { ChainerService } from '../src/modules/audit/chainer.service.js';
 import { OutboxModule } from '../src/modules/outbox/outbox.module.js';
 import { OutboxService } from '../src/modules/outbox/outbox.service.js';
@@ -56,10 +59,8 @@ describe('ChainerService (database)', () => {
     let leaf = null;
     for (let i = 0; i < 40 && !leaf; i++) {
       await chainer.run();
-      leaf = await prisma.auditEvent.findUnique({
-        where: {
-          sourceContext_sourceId: { sourceContext: 'ledger', sourceId },
-        },
+      leaf = await prisma.auditEvent.findFirst({
+        where: { sourceContext: 'ledger', sourceId },
       });
     }
     expect(leaf).not.toBeNull();
@@ -78,4 +79,3 @@ describe('ChainerService (database)', () => {
     expect(await prisma.auditEvent.count({ where: { partitionKey } })).toBe(1);
   });
 });
-
