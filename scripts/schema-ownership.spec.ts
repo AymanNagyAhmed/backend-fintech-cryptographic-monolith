@@ -4,6 +4,10 @@ import { dirname, join } from 'node:path';
 import {
   buildIndex,
   checkProject,
+  crossSchemaJoin,
+  findCrossSchemaForeignKeys,
+  findCrossSchemaJoins,
+  findCrossSchemaRelations,
   findUsages,
   parseDatasourceSchemas,
   parsePrismaFile,
@@ -248,14 +252,14 @@ describe('checkProject', () => {
   });
 
   it('fails for a module folder without an OWNERSHIP entry, once per module', () => {
-    write('src/modules/outbox/a.ts', '');
-    write('src/modules/outbox/b.ts', '');
+    write('src/modules/newmodule/a.ts', '');
+    write('src/modules/newmodule/b.ts', '');
     expect(checkProject(root).findings).toEqual([
       {
-        file: 'src/modules/outbox',
+        file: 'src/modules/newmodule',
         line: 0,
         message:
-          'module "outbox" has no entry in OWNERSHIP (scripts/schema-ownership.ts)',
+          'module "newmodule" has no entry in OWNERSHIP (scripts/schema-ownership.ts)',
       },
     ]);
   });
@@ -277,5 +281,118 @@ describe('checkProject', () => {
         (f) => f.message,
       ),
     ).toContain('OWNERSHIP.users lists unknown schema "nope"');
+  });
+});
+
+describe('cross-schema links (A-B14.2)', () => {
+  it('flags a Prisma relation to a model of another schema, not one inside the schema', () => {
+    const wallet = parsePrismaFile(
+      `model Wallet {
+        id      String @id
+        owner   User   @relation(fields: [ownerId], references: [id])
+        entries Entry[]
+        role    Role
+        @@schema("wallet")
+      }
+      model Entry {
+        id String @id
+        @@schema("wallet")
+      }`,
+      'wallet.prisma',
+    ).entities;
+    expect(
+      findCrossSchemaRelations([...wallet, ...entities]).map((f) => [
+        f.file,
+        f.line,
+        f.message.split(';')[0],
+      ]),
+    ).toEqual([
+      ['wallet.prisma', 3, 'Wallet.owner relates to User in schema "auth"'],
+    ]);
+  });
+
+  it('flags a JOIN across schemas in SQL, not a same-schema JOIN or a UNION of counts', () => {
+    expect(
+      crossSchemaJoin(
+        'SELECT 1 FROM ledger.accounts a JOIN auth.users u ON u.id = a.id',
+        index,
+      ),
+    ).toEqual(['auth', 'ledger']);
+    expect(
+      crossSchemaJoin(
+        'SELECT 1 FROM ledger.accounts a JOIN ledger.ledger_entries e ON e.id = a.id',
+        index,
+      ),
+    ).toBeUndefined();
+    expect(
+      crossSchemaJoin(
+        'SELECT (SELECT 1 FROM ledger.accounts) + (SELECT 1 FROM auth.users)',
+        index,
+      ),
+    ).toBeUndefined();
+  });
+
+  it('finds cross-schema JOINs in TypeScript SQL strings and templates', () => {
+    expect(
+      findCrossSchemaJoins(
+        [
+          'const a = tx.$queryRaw`SELECT 1 FROM auth.users u JOIN ledger.accounts a ON a.id = ${id}`;',
+          "const b = 'SELECT 1 FROM ledger.accounts a JOIN ledger.ledger_entries e ON true';",
+        ].join('\n'),
+        'x.ts',
+        index,
+      ),
+    ).toEqual([{ line: 1, schemas: ['auth', 'ledger'] }]);
+  });
+
+  it('flags a foreign key into another schema, not one inside the schema', () => {
+    const sql = [
+      'ALTER TABLE "ledger"."ledger_entries" ADD CONSTRAINT "a" FOREIGN KEY ("account_id") REFERENCES "ledger"."accounts"("id");',
+      'CREATE TABLE "wallet"."wallets" (',
+      '  "id" uuid PRIMARY KEY,',
+      '  "owner_id" uuid REFERENCES "auth"."users"("id")',
+      ');',
+    ].join('\n');
+    expect(findCrossSchemaForeignKeys(sql, 'm.sql')).toEqual([
+      {
+        file: 'm.sql',
+        line: 4,
+        message:
+          'foreign key from wallet.wallets references auth.users; no cross-schema foreign keys',
+      },
+    ]);
+  });
+
+  it('checkProject reports all three kinds', () => {
+    const root = mkdtempSync(join(tmpdir(), 'schema-ownership-'));
+    const write = (path: string, content: string) => {
+      mkdirSync(dirname(join(root, path)), { recursive: true });
+      writeFileSync(join(root, path), content);
+    };
+    try {
+      write('prisma/schema/base.prisma', BASE);
+      write(
+        'prisma/schema/auth.prisma',
+        AUTH.replace('role  Role', 'role  Role\n  acct  Account'),
+      );
+      write('prisma/schema/ledger.prisma', LEDGER);
+      write(
+        'prisma/sql/joined.sql',
+        'SELECT 1 FROM auth.users u JOIN ledger.accounts a ON true',
+      );
+      write(
+        'prisma/migrations/1_x/migration.sql',
+        'ALTER TABLE "auth"."users" ADD CONSTRAINT "f" FOREIGN KEY ("a") REFERENCES "ledger"."accounts"("id");',
+      );
+      const messages = checkProject(root, {}).findings.map((f) => f.message);
+      expect(messages).toHaveLength(3);
+      expect(messages.join('\n')).toMatch(/User\.acct relates to Account/);
+      expect(messages.join('\n')).toMatch(
+        /JOIN across schemas "auth", "ledger"/,
+      );
+      expect(messages.join('\n')).toMatch(/references ledger\.accounts/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
