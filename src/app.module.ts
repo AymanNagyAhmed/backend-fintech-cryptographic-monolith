@@ -29,6 +29,8 @@ import { CryptoModule } from './modules/crypto/crypto.module.js';
 import { OutboxModule } from './modules/outbox/outbox.module.js';
 import { AuditModule } from './modules/audit/audit.module.js';
 import { AuditJobsModule } from './modules/audit/jobs/audit-jobs.module.js';
+import { CheckpointsModule } from './modules/checkpoints/checkpoints.module.js';
+import { CheckpointJobsModule } from './modules/checkpoints/jobs/checkpoint-jobs.module.js';
 
 @Module({
   imports: [
@@ -54,6 +56,8 @@ import { AuditJobsModule } from './modules/audit/jobs/audit-jobs.module.js';
     CryptoModule,
     AuditModule,
     AuditJobsModule,
+    CheckpointsModule,
+    CheckpointJobsModule,
     IdempotencyJobsModule,
   ],
   controllers: [AppController],
