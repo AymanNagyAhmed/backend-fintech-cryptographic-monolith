@@ -10,10 +10,7 @@ import { DatabaseModule } from '../../database/database.module.js';
 import { VerifyService } from './verify.service.js';
 
 @Module({
-  imports: [
-    ConfigModule.forRoot({ isGlobal: true, validate }),
-    DatabaseModule,
-  ],
+  imports: [ConfigModule.forRoot({ isGlobal: true, validate }), DatabaseModule],
   providers: [VerifyService],
 })
 class VerifyCliModule {}

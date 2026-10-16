@@ -92,9 +92,7 @@ describe('OpenBao audit-signer policy (e2e)', () => {
   it('committed policy only allows sign and read on the signing key', () => {
     expect(committedPolicy).toMatch(/transit\/sign\/audit-signing/);
     expect(committedPolicy).toMatch(/transit\/keys\/audit-signing/);
-    expect(committedPolicy).not.toMatch(
-      /transit\/keys\/audit-signing\/rotate/,
-    );
+    expect(committedPolicy).not.toMatch(/transit\/keys\/audit-signing\/rotate/);
     expect(committedPolicy).toMatch(/capabilities = \["update"\]/);
     expect(committedPolicy).toMatch(/capabilities = \["read"\]/);
   });

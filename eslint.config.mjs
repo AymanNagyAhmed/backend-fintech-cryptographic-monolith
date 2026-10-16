@@ -36,13 +36,14 @@ const PUBLIC_MODULE_FILES = [
   'exceptions/**',
   'interfaces/**',
   'decorators/**',
+  'events/**',
   'guards/**',
 ];
 
 const boundariesRules = {
   default: 'disallow',
   message:
-    'Module boundary: import another module only through its *.module.ts, *.service.ts, dto/, exceptions/, interfaces/, decorators/ or guards/ files, or with `import type` (A-B14.1).',
+    'Module boundary: import another module only through its *.module.ts, *.service.ts, dto/, exceptions/, interfaces/, decorators/, events/ or guards/ files, or with `import type` (A-B14.1).',
   policies: [
     // Platform layers never depend on feature modules.
     {

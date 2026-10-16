@@ -4,7 +4,10 @@ import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { validate } from '../src/config/env.validation.js';
 import { DatabaseModule } from '../src/database/database.module.js';
-import { GENESIS_PREV_HASH, chainHash } from '../src/modules/audit/chain-hash.js';
+import {
+  GENESIS_PREV_HASH,
+  chainHash,
+} from '../src/modules/audit/chain-hash.js';
 import { VerifyService } from '../src/modules/audit/verify.service.js';
 
 // Needs Compose PostgreSQL. Migrator disables triggers to plant a broken leaf (2.1 Done-when).
@@ -52,9 +55,7 @@ describe('VerifyService (database)', () => {
       ],
     );
 
-    await migrator.query(
-      `ALTER TABLE audit.audit_events DISABLE TRIGGER USER`,
-    );
+    await migrator.query(`ALTER TABLE audit.audit_events DISABLE TRIGGER USER`);
     try {
       await migrator.query(
         `UPDATE audit.audit_events

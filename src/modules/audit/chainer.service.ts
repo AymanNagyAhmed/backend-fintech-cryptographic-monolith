@@ -8,6 +8,7 @@ import {
   tryPartitionLock,
 } from '../../generated/prisma/sql.js';
 import type { OutboxContext } from '../outbox/outbox-context.js';
+import type { OutboxRow } from '../outbox/outbox-row.js';
 import { OutboxService } from '../outbox/outbox.service.js';
 import { GENESIS_PREV_HASH, chainHash } from './chain-hash.js';
 
@@ -65,8 +66,28 @@ export class ChainerService {
     if (!row?.context || !row.id || row.payload == null || !row.createdAt)
       return 'empty';
     const context = row.context as OutboxContext;
-    const sourceId = row.id;
-    const createdAt = row.createdAt;
+    const outcome = await this.chainRow(tx, {
+      context,
+      id: row.id,
+      payload: row.payload,
+      createdAt: row.createdAt,
+    });
+    if (outcome === 'chained')
+      await this.outbox.markProcessed(tx, context, row.id);
+    return outcome;
+  }
+
+  /**
+   * Writes the audit leaf for one claimed outbox row in `tx` (shared by the chainer poll and
+   * the outbox dispatcher handler); the caller marks the row processed, in the same `tx`.
+   * Idempotent on (context, id). `skipped` = the partition lock is held by another writer;
+   * nothing was written and the row must stay unprocessed.
+   */
+  async chainRow(
+    tx: Prisma.TransactionClient,
+    row: OutboxRow,
+  ): Promise<'chained' | 'skipped'> {
+    const { context, id: sourceId, createdAt } = row;
 
     const payload = row.payload as Record<string, unknown>;
     const partitionKey = partitionKeyOf(payload);
@@ -110,7 +131,6 @@ export class ChainerService {
       }
     }
 
-    await this.outbox.markProcessed(tx, context, sourceId);
     return 'chained';
   }
 }

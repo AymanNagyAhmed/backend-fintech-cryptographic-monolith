@@ -4,11 +4,7 @@ import { PrismaService } from '../../database/prisma.service.js';
 import { OutboxService } from '../outbox/outbox.service.js';
 
 export type AuditAccessOperation =
-  | 'verify'
-  | 'proof'
-  | 'consistency'
-  | 'search'
-  | 'export';
+  'verify' | 'proof' | 'consistency' | 'search' | 'export';
 
 /**
  * Records that someone read audit data (A-B9.8 / 2.1). Written to auth.outbox
