@@ -26,6 +26,7 @@
     "migrate:status": "prisma migrate status",
     "seed": "prisma db seed",
     "schema:ownership": "tsx scripts/check-schema-ownership.ts",
+    "modules:graph": "tsx scripts/check-module-graph.ts",
     "api-client": "tsx scripts/api-client.ts",
     "sign-request": "tsx scripts/sign-request.ts",
     "job:reconcile": "tsx scripts/reconcile.ts",

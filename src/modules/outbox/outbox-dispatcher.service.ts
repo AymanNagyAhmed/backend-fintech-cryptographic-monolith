@@ -76,7 +76,10 @@ export class OutboxDispatcherService {
           if (listeners.length === 0)
             throw new OutboxNoHandlerError(context, row.id, eventName);
           const results: unknown[] = [];
-          for (const listener of listeners) results.push(await listener(event));
+          for (const listener of listeners) {
+            const outcome: unknown = listener(event); // handlers may be async
+            results.push(await outcome);
+          }
           if (results.includes(OUTBOX_DEFER)) {
             deferred += 1;
             continue;
