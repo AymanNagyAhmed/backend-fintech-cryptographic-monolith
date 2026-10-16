@@ -14,6 +14,7 @@ import {
   inclusionProof,
   merkleHashToHex,
 } from '../checkpoints/merkle.js';
+import { ExportWormService } from './export-worm.service.js';
 
 export interface ExportRequest {
   partitionKey?: string;
@@ -26,6 +27,7 @@ export interface ExportResult {
   path: string;
   manifestSha256: string;
   recordCount: number;
+  wormKey?: string;
 }
 
 /**
@@ -41,10 +43,10 @@ export class ExportService {
     private readonly prisma: PrismaService,
     private readonly access: AuditAccessService,
     private readonly signingKeys: SigningKeysService,
-    config: ConfigService<EnvironmentVariables, true>,
+    private readonly worm: ExportWormService,
+    _config: ConfigService<EnvironmentVariables, true>,
   ) {
     this.outDir = join(process.cwd(), 'var', 'exports');
-    void config; // reserved for future export retention config
   }
 
   async createExport(
@@ -163,13 +165,19 @@ export class ExportService {
       'manifest.json': manifestFile,
     });
 
+    const worm = await this.worm.putExportZip(path, manifestSha256);
     await this.access.record(
       actorId,
       'export',
       `records=${records.length}&sha=${manifestSha256.slice(0, 16)}`,
     );
     this.logger.log({ path, recordCount: records.length }, 'Export ZIP written');
-    return { path, manifestSha256, recordCount: records.length };
+    return {
+      path,
+      manifestSha256,
+      recordCount: records.length,
+      ...(worm?.key !== undefined ? { wormKey: worm.key } : {}),
+    };
   }
 }
 
