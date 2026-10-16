@@ -27,6 +27,7 @@ import { TransfersModule } from './modules/transfers/transfers.module.js';
 import { PaymentsModule } from './modules/payments/payments.module.js';
 import { CryptoModule } from './modules/crypto/crypto.module.js';
 import { OutboxModule } from './modules/outbox/outbox.module.js';
+import { AuditModule } from './modules/audit/audit.module.js';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { OutboxModule } from './modules/outbox/outbox.module.js';
     TransfersModule,
     PaymentsModule,
     CryptoModule,
+    AuditModule,
     IdempotencyJobsModule,
   ],
   controllers: [AppController],

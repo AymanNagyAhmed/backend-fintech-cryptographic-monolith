@@ -1,0 +1,21 @@
+// Append-only hash-chained audit leaves (A-B9.4). Written only by the chainer (A-B9.5),
+// never on the request path. UNIQUE (partition_key, seq); app_writer has SELECT+INSERT only.
+model AuditEvent {
+  id             String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  partitionKey   String   @map("partition_key") @db.VarChar(64)
+  seq            BigInt   @db.BigInt
+  payload        Json     @db.JsonB
+  prevHash       String   @map("prev_hash") @db.Char(64)
+  hash           String   @db.Char(64)
+  // Outbox row that produced this leaf; chainer is idempotent on this pair (A-B9.5)
+  sourceContext  String   @map("source_context") @db.VarChar(32)
+  sourceId       String   @map("source_id") @db.Uuid
+  occurredAt     DateTime @map("occurred_at") @db.Timestamptz(6)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([partitionKey, seq])
+  @@unique([sourceContext, sourceId])
+  @@index([partitionKey, occurredAt])
+  @@map("audit_events")
+  @@schema("audit")
+}
