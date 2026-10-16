@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { isCurrency, type Currency } from '../../common/money/currency.js';
 import { UnsupportedCurrencyException } from '../../common/money/exceptions/unsupported-currency.exception.js';
+import { Money } from '../../common/money/money.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { WalletsService } from '../wallets/wallets.service.js';
@@ -10,6 +11,7 @@ import {
   reservesNoLiabilities,
   reservesSnapshotExists,
   reservesSnapshotNotFound,
+  reservesUnderCollateralized,
 } from './exceptions/reserves.exceptions.js';
 import {
   buildMerkleSumTree,
@@ -102,6 +104,47 @@ export class ReservesService {
       balance: mine.balance.toFixed(),
       salt: mine.salt,
       path,
+    };
+  }
+
+  /**
+   * Compare published liabilities to a reserves figure (custodian statement or on-chain
+   * fixture). Passes when reserves >= liabilities (A-B13.7).
+   */
+  async compareToReserves(
+    currency: string,
+    reservesFigure: string,
+  ): Promise<{
+    currency: Currency;
+    liabilities: string;
+    reserves: string;
+    ok: boolean;
+    snapshotId: string;
+  }> {
+    if (!isCurrency(currency)) throw new UnsupportedCurrencyException(currency);
+    const snapshot = await this.prisma.reservesSnapshot.findFirst({
+      where: { currency },
+      orderBy: { snapshotDate: 'desc' },
+    });
+    if (!snapshot) throw reservesSnapshotNotFound(currency);
+    const liabilities = Money.of(
+      snapshot.totalLiabilities.toFixed(),
+      currency,
+    );
+    const reserves = Money.of(reservesFigure, currency);
+    const ok = reserves.gte(liabilities);
+    if (!ok)
+      throw reservesUnderCollateralized(
+        currency,
+        liabilities.toString(),
+        reserves.toString(),
+      );
+    return {
+      currency,
+      liabilities: liabilities.toString(),
+      reserves: reserves.toString(),
+      ok: true,
+      snapshotId: snapshot.id,
     };
   }
 

@@ -244,3 +244,39 @@ describe('ReservesService.proofForUser', () => {
     ).toBe(true);
   });
 });
+
+describe('ReservesService.compareToReserves', () => {
+  it('passes when reserves >= liabilities', async () => {
+    const service = new ReservesService(
+      {
+        reservesSnapshot: {
+          findFirst: vi.fn().mockResolvedValue({
+            id: 'snap1',
+            totalLiabilities: new Prisma.Decimal('100.00'),
+          }),
+        },
+      } as unknown as PrismaService,
+      { sumBalancesByOwner: vi.fn() } as unknown as WalletsService,
+    );
+    await expect(
+      service.compareToReserves('AED', '100.00'),
+    ).resolves.toMatchObject({ ok: true, liabilities: '100.00' });
+  });
+
+  it('rejects under-collateralization', async () => {
+    const service = new ReservesService(
+      {
+        reservesSnapshot: {
+          findFirst: vi.fn().mockResolvedValue({
+            id: 'snap1',
+            totalLiabilities: new Prisma.Decimal('100.00'),
+          }),
+        },
+      } as unknown as PrismaService,
+      { sumBalancesByOwner: vi.fn() } as unknown as WalletsService,
+    );
+    await expect(
+      service.compareToReserves('AED', '99.99'),
+    ).rejects.toMatchObject({ code: 'RESERVES_UNDER_COLLATERALIZED' });
+  });
+});

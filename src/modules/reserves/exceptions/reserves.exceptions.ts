@@ -28,3 +28,14 @@ export const reservesLeafNotFound = () =>
     'No leaf for this user in the latest reserves snapshot (zero balance or not included).',
     HttpStatus.NOT_FOUND,
   );
+
+export const reservesUnderCollateralized = (
+  currency: string,
+  liabilities: string,
+  reserves: string,
+) =>
+  new DomainException(
+    'RESERVES_UNDER_COLLATERALIZED',
+    `${currency} reserves ${reserves} are below liabilities ${liabilities}.`,
+    HttpStatus.UNPROCESSABLE_ENTITY,
+  );
