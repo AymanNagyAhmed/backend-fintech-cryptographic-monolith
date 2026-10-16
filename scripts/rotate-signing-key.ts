@@ -22,7 +22,10 @@ const keyRef = env.SIGNING_KEY_NAME;
 
 try {
   const rotation = new KeyRotationService(
-    new OpenBaoTransitSigner(env.BAO_ADDR, env.BAO_TOKEN),
+    new OpenBaoTransitSigner(
+      env.BAO_ADDR,
+      env.BAO_ADMIN_TOKEN ?? env.BAO_TOKEN,
+    ),
     new SigningKeysService(prisma),
   );
   const result = await rotation.rotate(keyRef);

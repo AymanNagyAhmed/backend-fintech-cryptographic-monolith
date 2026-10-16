@@ -146,6 +146,17 @@ export class EnvironmentVariables {
   @NotEquals(PLACEHOLDER)
   BAO_TOKEN: string;
 
+  /**
+   * OpenBao token that may rotate / create Transit keys (ops). Optional: when unset,
+   * rotation falls back to BAO_TOKEN. The Nest sign path must use an `audit-signer`
+   * token in BAO_TOKEN (A-B8.8); keep the root token here for `make rotate-key`.
+   */
+  @IsOptional()
+  @IsString()
+  @MinLength(16)
+  @NotEquals(PLACEHOLDER)
+  BAO_ADMIN_TOKEN?: string;
+
   // Key store behind the Signer: OpenBao Transit (dev), AWS KMS (prod), in-memory keys (tests only)
   @IsOptional()
   @IsIn(SIGNER_BACKENDS)

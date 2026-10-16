@@ -36,14 +36,18 @@ describe('env validation', () => {
     expect(env.CHECKPOINT_INTERVAL_SEC).toBe(60);
   });
 
-  it.each(['JWT_ACCESS_SECRET', 'DATABASE_URL', 'BAO_TOKEN', 'WEBHOOK_SECRET_STRIPE', 'TOTP_ENCRYPTION_KEY', 'API_CLIENT_ENCRYPTION_KEY'])(
-    'refuses to start when %s is missing',
-    (key) => {
-      const env = validEnv();
-      delete env[key];
-      expect(() => validate(env)).toThrow(new RegExp(`- ${key}:`));
-    },
-  );
+  it.each([
+    'JWT_ACCESS_SECRET',
+    'DATABASE_URL',
+    'BAO_TOKEN',
+    'WEBHOOK_SECRET_STRIPE',
+    'TOTP_ENCRYPTION_KEY',
+    'API_CLIENT_ENCRYPTION_KEY',
+  ])('refuses to start when %s is missing', (key) => {
+    const env = validEnv();
+    delete env[key];
+    expect(() => validate(env)).toThrow(new RegExp(`- ${key}:`));
+  });
 
   const messageOf = (env: Record<string, string>): string => {
     try {
@@ -55,14 +59,20 @@ describe('env validation', () => {
   };
 
   it('rejects the change-me placeholder and short secrets', () => {
-    const msg = messageOf({ ...validEnv(), JWT_REFRESH_SECRET: 'change-me', JWT_ACCESS_SECRET: 'short' });
+    const msg = messageOf({
+      ...validEnv(),
+      JWT_REFRESH_SECRET: 'change-me',
+      JWT_ACCESS_SECRET: 'short',
+    });
     expect(msg).toContain('- JWT_REFRESH_SECRET:');
     expect(msg).toContain('- JWT_ACCESS_SECRET:');
   });
 
   it('never echoes secret values in the error', () => {
     const leaked = 'super-secret-but-too-short';
-    expect(messageOf({ ...validEnv(), JWT_ACCESS_SECRET: leaked })).not.toContain(leaked);
+    expect(
+      messageOf({ ...validEnv(), JWT_ACCESS_SECRET: leaked }),
+    ).not.toContain(leaked);
   });
 
   it('rejects an unknown signing algorithm and a bad port', () => {
@@ -73,25 +83,55 @@ describe('env validation', () => {
 
   it('defaults SIGNER_BACKEND to openbao and refuses an unknown backend', () => {
     expect(validate(validEnv()).SIGNER_BACKEND).toBe('openbao');
-    expect(validate({ ...validEnv(), SIGNER_BACKEND: 'aws-kms' }).SIGNER_BACKEND).toBe('aws-kms');
-    expect(messageOf({ ...validEnv(), SIGNER_BACKEND: 'file' })).toContain('- SIGNER_BACKEND:');
+    expect(
+      validate({ ...validEnv(), SIGNER_BACKEND: 'aws-kms' }).SIGNER_BACKEND,
+    ).toBe('aws-kms');
+    expect(messageOf({ ...validEnv(), SIGNER_BACKEND: 'file' })).toContain(
+      '- SIGNER_BACKEND:',
+    );
+  });
+
+  it('accepts optional BAO_ADMIN_TOKEN and refuses the change-me placeholder', () => {
+    expect(validate(validEnv()).BAO_ADMIN_TOKEN).toBeUndefined();
+    expect(
+      validate({ ...validEnv(), BAO_ADMIN_TOKEN: 'z'.repeat(48) })
+        .BAO_ADMIN_TOKEN,
+    ).toBe('z'.repeat(48));
+    expect(
+      messageOf({ ...validEnv(), BAO_ADMIN_TOKEN: 'change-me' }),
+    ).toContain('- BAO_ADMIN_TOKEN:');
   });
 
   it('refuses the local signer in production only', () => {
-    expect(validate({ ...validEnv(), SIGNER_BACKEND: 'local' }).SIGNER_BACKEND).toBe('local');
     expect(
-      messageOf({ ...validEnv(), NODE_ENV: 'production', SIGNER_BACKEND: 'local' }),
-    ).toContain('- SIGNER_BACKEND: local keeps keys in memory and is refused in production');
+      validate({ ...validEnv(), SIGNER_BACKEND: 'local' }).SIGNER_BACKEND,
+    ).toBe('local');
+    expect(
+      messageOf({
+        ...validEnv(),
+        NODE_ENV: 'production',
+        SIGNER_BACKEND: 'local',
+      }),
+    ).toContain(
+      '- SIGNER_BACKEND: local keeps keys in memory and is refused in production',
+    );
   });
 
-  it.each(['Audit', 'alias/audit-signing', 'audit signing', ''])('rejects SIGNING_KEY_NAME=%j', (name) => {
-    expect(messageOf({ ...validEnv(), SIGNING_KEY_NAME: name })).toContain('- SIGNING_KEY_NAME:');
-  });
+  it.each(['Audit', 'alias/audit-signing', 'audit signing', ''])(
+    'rejects SIGNING_KEY_NAME=%j',
+    (name) => {
+      expect(messageOf({ ...validEnv(), SIGNING_KEY_NAME: name })).toContain(
+        '- SIGNING_KEY_NAME:',
+      );
+    },
+  );
 
   it('defaults TRUST_PROXY to 0 and accepts a hop count', () => {
     expect(validate(validEnv()).TRUST_PROXY).toBe(0);
     expect(validate({ ...validEnv(), TRUST_PROXY: '1' }).TRUST_PROXY).toBe(1);
-    expect(messageOf({ ...validEnv(), TRUST_PROXY: 'true' })).toContain('- TRUST_PROXY:');
+    expect(messageOf({ ...validEnv(), TRUST_PROXY: 'true' })).toContain(
+      '- TRUST_PROXY:',
+    );
   });
 
   it('defaults RECONCILIATION_CRON to 01:00 and checks the field count', () => {

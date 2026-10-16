@@ -76,7 +76,9 @@ export const keyRotationProvider = {
     new KeyRotationService(
       new OpenBaoTransitSigner(
         config.get('BAO_ADDR', { infer: true }),
-        config.get('BAO_TOKEN', { infer: true }),
+        // Prefer BAO_ADMIN_TOKEN so BAO_TOKEN can be the narrow audit-signer policy (A-B8.8).
+        config.get('BAO_ADMIN_TOKEN', { infer: true }) ??
+          config.get('BAO_TOKEN', { infer: true }),
       ),
       keys,
     ),
