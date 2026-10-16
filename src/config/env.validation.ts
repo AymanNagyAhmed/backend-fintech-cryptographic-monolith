@@ -147,6 +147,13 @@ export class EnvironmentVariables {
   @Max(1000)
   CHAINER_BATCH_SIZE: number = 50;
 
+  // Warn when unprocessed outbox rows >= this (A-B9.7); requests never wait on the chainer
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  OUTBOX_LAG_ALERT_THRESHOLD: number = 1000;
+
   @IsString()
   @MinLength(32)
   @NotEquals(PLACEHOLDER)
