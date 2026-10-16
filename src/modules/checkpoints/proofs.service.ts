@@ -42,7 +42,7 @@ export class ProofsService {
    * Inclusion proof of an audit event against the latest STH that covers it (A-B10.3).
    */
   async inclusionProofForEvent(eventId: string): Promise<InclusionProofResult> {
-    const event = await this.prisma.auditEvent.findUnique({
+    const event = await this.prisma.auditEvent.findFirst({
       where: { id: eventId },
       select: { id: true, hash: true, createdAt: true },
     });

@@ -1,27 +1,26 @@
-// Append-only hash-chained audit leaves (A-B9.4). Written only by the chainer (A-B9.5),
-// never on the request path. UNIQUE (partition_key, seq); app_writer has SELECT+INSERT only.
+// Append-only hash-chained audit leaves (A-B9.4). HASH-partitioned by partition_key
+// with 16 partitions (A-B12.2 / 2.15). PK includes partition_key (PostgreSQL rule).
 model AuditEvent {
-  id             String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  id             String   @default(dbgenerated("uuidv7()")) @db.Uuid
   partitionKey   String   @map("partition_key") @db.VarChar(64)
   seq            BigInt   @db.BigInt
   payload        Json     @db.JsonB
   prevHash       String   @map("prev_hash") @db.Char(64)
   hash           String   @db.Char(64)
-  // Outbox row that produced this leaf; chainer is idempotent on this pair (A-B9.5)
   sourceContext  String   @map("source_context") @db.VarChar(32)
   sourceId       String   @map("source_id") @db.Uuid
   occurredAt     DateTime @map("occurred_at") @db.Timestamptz(6)
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
+  @@id([partitionKey, id])
   @@unique([partitionKey, seq])
-  @@unique([sourceContext, sourceId])
+  @@unique([partitionKey, sourceContext, sourceId])
   @@index([partitionKey, occurredAt])
   @@map("audit_events")
   @@schema("audit")
 }
 
 // Signed tree heads (STH) over the global Merkle tree of audit leaves (A-B10.2).
-// tree_size is the number of leaves covered; UNIQUE so checkpoints never fork silently.
 model TreeHead {
   id              String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
   treeSize        Int       @map("tree_size")
@@ -31,7 +30,6 @@ model TreeHead {
   alg             String    @db.VarChar(32)
   keyId           String    @map("key_id") @db.VarChar(128)
   signature       String    @db.Text
-  // Filled in A-B10.5 (RFC 3161); null until the TSA token is stored
   tsaToken        Bytes?    @map("tsa_token")
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
