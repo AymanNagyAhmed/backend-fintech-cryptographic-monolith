@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -14,12 +14,39 @@ import type { AuthUser } from '../auth/auth.types.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import { ComplianceService } from './compliance.service.js';
+import { ExportService } from './export.service.js';
 
 @ApiTags('Compliance')
 @ApiBearerAuth()
 @Controller('compliance')
 export class ComplianceController {
-  constructor(private readonly compliance: ComplianceService) {}
+  constructor(
+    private readonly compliance: ComplianceService,
+    private readonly exports: ExportService,
+  ) {}
+
+  @Post('exports')
+  @Roles('compliance', 'admin')
+  @ResponseMessage('Regulator export created')
+  @ApiOperation({
+    operationId: 'compliance.export',
+    summary: 'Build a ZIP of records, proofs, STHs, TSA tokens, public keys',
+  })
+  @ApiOkEnvelope({ type: 'object' })
+  @ApiFailureResponse(401, 'Missing or invalid access token')
+  @ApiFailureResponse(403, 'Requires compliance or admin with MFA')
+  createExport(
+    @CurrentUser() user: AuthUser,
+    @Body()
+    body: {
+      partitionKey?: string;
+      from?: string;
+      to?: string;
+      limit?: number;
+    },
+  ) {
+    return this.exports.createExport(user.id, body ?? {});
+  }
 
   @Get('search')
   @Roles('compliance', 'admin')
