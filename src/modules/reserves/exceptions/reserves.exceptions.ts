@@ -14,3 +14,17 @@ export const reservesNoLiabilities = (currency: string) =>
     `No client holds a positive ${currency} balance; there is nothing to commit to.`,
     HttpStatus.UNPROCESSABLE_ENTITY,
   );
+
+export const reservesSnapshotNotFound = (currency: string) =>
+  new DomainException(
+    'RESERVES_SNAPSHOT_NOT_FOUND',
+    `No published ${currency} reserves snapshot.`,
+    HttpStatus.NOT_FOUND,
+  );
+
+export const reservesLeafNotFound = () =>
+  new DomainException(
+    'RESERVES_LEAF_NOT_FOUND',
+    'No leaf for this user in the latest reserves snapshot (zero balance or not included).',
+    HttpStatus.NOT_FOUND,
+  );

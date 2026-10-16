@@ -6,10 +6,16 @@ import { PrismaService } from '../../database/prisma.service.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { WalletsService } from '../wallets/wallets.service.js';
 import {
+  reservesLeafNotFound,
   reservesNoLiabilities,
   reservesSnapshotExists,
+  reservesSnapshotNotFound,
 } from './exceptions/reserves.exceptions.js';
-import { buildMerkleSumTree, type MerkleSumLeaf } from './merkle-sum.js';
+import {
+  buildMerkleSumTree,
+  sumInclusionProof,
+  type MerkleSumLeaf,
+} from './merkle-sum.js';
 import { merkleHashToHex } from '../checkpoints/merkle.js';
 
 const UNIQUE_VIOLATION = 'P2002';
@@ -31,12 +37,73 @@ export interface ReservesSnapshotView {
 
 const utcDay = (d: Date) => d.toISOString().slice(0, 10);
 
+export interface ReservesProofView {
+  snapshotId: string;
+  currency: Currency;
+  snapshotDate: string;
+  treeSize: number;
+  rootHash: string;
+  totalLiabilities: string;
+  leafIndex: number;
+  balance: string;
+  salt: string;
+  /** Sibling nodes from leaf toward root: { hash hex, sum }. */
+  path: { hash: string; sum: string }[];
+}
+
 @Injectable()
 export class ReservesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly wallets: WalletsService,
   ) {}
+
+  /**
+   * Inclusion proof for the caller's leaf in the latest published snapshot (A-B13.6).
+   * Returns leaf, salt and Merkle-sum path so the client can verify against the published root.
+   */
+  async proofForUser(
+    userId: string,
+    currency: string,
+  ): Promise<ReservesProofView> {
+    if (!isCurrency(currency)) throw new UnsupportedCurrencyException(currency);
+    const snapshot = await this.prisma.reservesSnapshot.findFirst({
+      where: { currency },
+      orderBy: { snapshotDate: 'desc' },
+    });
+    if (!snapshot) throw reservesSnapshotNotFound(currency);
+
+    const leafRows = await this.prisma.reservesLeaf.findMany({
+      where: { snapshotId: snapshot.id },
+      orderBy: { leafIndex: 'asc' },
+    });
+    const mine = leafRows.find((r) => r.userId === userId);
+    if (!mine) throw reservesLeafNotFound();
+
+    const leaves: MerkleSumLeaf[] = leafRows.map((r) => ({
+      userId: r.userId,
+      balance: r.balance.toFixed(),
+      salt: r.salt,
+    }));
+    const tree = buildMerkleSumTree(currency, leaves);
+    const path = sumInclusionProof(tree, mine.leafIndex).map((step) => ({
+      hash: merkleHashToHex(step.hash),
+      sum: step.sum,
+    }));
+
+    return {
+      snapshotId: snapshot.id,
+      currency,
+      snapshotDate: utcDay(snapshot.snapshotDate),
+      treeSize: snapshot.treeSize,
+      rootHash: snapshot.rootHash,
+      totalLiabilities: snapshot.totalLiabilities.toFixed(),
+      leafIndex: mine.leafIndex,
+      balance: mine.balance.toFixed(),
+      salt: mine.salt,
+      path,
+    };
+  }
 
   /**
    * Publishes the proof-of-reserves commitment for `currency` and the UTC day of `now`

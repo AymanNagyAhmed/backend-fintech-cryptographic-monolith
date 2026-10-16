@@ -189,3 +189,58 @@ describe('ReservesService.buildDailySnapshot', () => {
     expect(withTx).not.toHaveBeenCalled();
   });
 });
+
+describe('ReservesService.proofForUser', () => {
+  it('returns leaf salt and path for the caller', async () => {
+    const leaves = [
+      { userId: U1, balance: '10.00', salt: 'aa'.repeat(16) },
+      { userId: U2, balance: '20.00', salt: 'bb'.repeat(16) },
+    ];
+    const tree = buildMerkleSumTree('AED', leaves);
+    const snapshot = {
+      findFirst: vi.fn().mockResolvedValue({
+        id: 'snap1',
+        currency: 'AED',
+        snapshotDate: new Date('2026-10-16T00:00:00Z'),
+        treeSize: 2,
+        rootHash: merkleHashToHex(tree.root.hash),
+        totalLiabilities: new Prisma.Decimal(tree.root.sum),
+      }),
+    };
+    const leaf = {
+      findMany: vi.fn().mockResolvedValue(
+        leaves.map((l, i) => ({
+          snapshotId: 'snap1',
+          leafIndex: i,
+          userId: l.userId,
+          balance: new Prisma.Decimal(l.balance),
+          salt: l.salt,
+          leafHash: merkleHashToHex(tree.leaves[i]!.hash),
+        })),
+      ),
+    };
+    const service = new ReservesService(
+      {
+        reservesSnapshot: snapshot,
+        reservesLeaf: leaf,
+      } as unknown as PrismaService,
+      { sumBalancesByOwner: vi.fn() } as unknown as WalletsService,
+    );
+    const proof = await service.proofForUser(U1, 'AED');
+    expect(proof.leafIndex).toBe(0);
+    expect(proof.salt).toBe(leaves[0]!.salt);
+    expect(
+      verifySumInclusion(
+        {
+          currency: 'AED',
+          leaf: leaves[0]!,
+          index: proof.leafIndex,
+          treeSize: proof.treeSize,
+          path: sumInclusionProof(tree, 0),
+        },
+        proof.rootHash,
+        proof.totalLiabilities,
+      ),
+    ).toBe(true);
+  });
+});
