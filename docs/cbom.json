@@ -1,0 +1,164 @@
+{
+  "version": 1,
+  "description": "Cryptographic Bill of Materials for backend_monolith (interview prep 2.7). Every production src file that imports node:crypto must be listed; npm run cbom:check fails on drift.",
+  "packages": [
+    {
+      "name": "@nestjs/jwt",
+      "algorithms": ["HS256"],
+      "purpose": "Access JWT sign/verify (issuer/audience pinned in TokenService)"
+    },
+    {
+      "name": "@aws-sdk/client-kms",
+      "algorithms": ["ED25519_SHA_512", "ECDSA_SHA_256", "ML_DSA_SHAKE_256"],
+      "purpose": "Production detached signatures via AwsKmsSigner (private keys never leave KMS)"
+    }
+  ],
+  "sites": [
+    {
+      "file": "src/common/crypto/canonical-json.ts",
+      "imports": ["createHash"],
+      "algorithms": ["SHA-256"],
+      "purpose": "Hash canonical JSON (audit payloads, idempotency request hash)",
+      "protects": "integrity of structured payloads"
+    },
+    {
+      "file": "src/common/crypto/secret-box.ts",
+      "imports": ["createCipheriv", "createDecipheriv", "randomBytes"],
+      "algorithms": ["AES-256-GCM"],
+      "purpose": "Seal small secrets at rest with AAD bound to the row",
+      "protects": "TOTP seeds, B2B HMAC secrets, similar ciphertext at rest"
+    },
+    {
+      "file": "src/common/middleware/request-id.middleware.ts",
+      "imports": ["randomBytes"],
+      "algorithms": ["CSPRNG"],
+      "purpose": "Generate request ids when the client omits x-request-id",
+      "protects": "correlation ids (not confidentiality)"
+    },
+    {
+      "file": "src/common/request-signing/canonical-request.ts",
+      "imports": [
+        "createHash",
+        "createHmac",
+        "randomBytes",
+        "sign",
+        "KeyObject"
+      ],
+      "algorithms": ["SHA-256", "HMAC-SHA256", "Ed25519"],
+      "purpose": "Canonical B2B request string, HMAC/Ed25519 signatures, nonces",
+      "protects": "B2B request authenticity and replay resistance"
+    },
+    {
+      "file": "src/modules/auth/api-clients/api-clients.service.ts",
+      "imports": [
+        "createHmac",
+        "createPublicKey",
+        "randomBytes",
+        "timingSafeEqual",
+        "verify",
+        "KeyObject"
+      ],
+      "algorithms": ["HMAC-SHA256", "Ed25519"],
+      "purpose": "Create and verify B2B api_clients credentials",
+      "protects": "B2B client authentication"
+    },
+    {
+      "file": "src/modules/auth/auth.service.ts",
+      "imports": ["randomUUID"],
+      "algorithms": ["CSPRNG"],
+      "purpose": "Session family ids for refresh-token rotation",
+      "protects": "session family identity"
+    },
+    {
+      "file": "src/modules/auth/token.service.ts",
+      "imports": ["createHmac", "randomBytes"],
+      "algorithms": ["HMAC-SHA256", "CSPRNG"],
+      "purpose": "Opaque refresh tokens and HMAC of refresh material",
+      "protects": "refresh-token secrecy and integrity"
+    },
+    {
+      "file": "src/modules/auth/totp/totp.ts",
+      "imports": ["createHmac", "timingSafeEqual"],
+      "algorithms": ["HMAC-SHA1"],
+      "purpose": "RFC 6238 TOTP / HOTP codes",
+      "protects": "second-factor authentication"
+    },
+    {
+      "file": "src/modules/auth/totp/totp.service.ts",
+      "imports": ["randomBytes"],
+      "algorithms": ["CSPRNG"],
+      "purpose": "Generate TOTP secrets before sealing",
+      "protects": "TOTP secret generation"
+    },
+    {
+      "file": "src/modules/crypto/adapters/aws-kms.signer.ts",
+      "imports": ["createPublicKey", "KeyObject"],
+      "algorithms": ["ed25519", "ecdsa-p256", "ml-dsa-65"],
+      "purpose": "Load KMS public keys for local verify; Sign stays in KMS",
+      "protects": "audit checkpoint signatures (production)"
+    },
+    {
+      "file": "src/modules/crypto/adapters/key-store.signer.ts",
+      "imports": ["KeyObject"],
+      "algorithms": [],
+      "purpose": "Type-only KeyObject for cached public keys during verify",
+      "protects": "typed public-key cache (no local private keys)"
+    },
+    {
+      "file": "src/modules/crypto/adapters/local-test.signer.ts",
+      "imports": ["generateKeyPairSync", "KeyObject", "KeyPairKeyObjectResult"],
+      "algorithms": ["ed25519", "ecdsa-p256", "ml-dsa-65"],
+      "purpose": "In-process test keys only; refused when NODE_ENV=production",
+      "protects": "test / crypto-agility doubles (never production keys)"
+    },
+    {
+      "file": "src/modules/crypto/adapters/openbao-transit.signer.ts",
+      "imports": ["createPublicKey", "KeyObject"],
+      "algorithms": ["ed25519", "ecdsa-p256"],
+      "purpose": "Load Transit public keys for local verify; Sign stays in OpenBao",
+      "protects": "audit checkpoint signatures (dev)"
+    },
+    {
+      "file": "src/modules/crypto/public-key.ts",
+      "imports": ["createPublicKey", "KeyObject"],
+      "algorithms": ["SPKI"],
+      "purpose": "Encode/decode SPKI public keys for crypto.signing_keys",
+      "protects": "published verification material (never private keys)"
+    },
+    {
+      "file": "src/modules/crypto/signature-algorithms.ts",
+      "imports": ["sign", "verify", "KeyObject"],
+      "algorithms": ["ed25519", "ecdsa-p256", "ml-dsa-65"],
+      "purpose": "Local detached sign (test keys) and verify with algorithm registry",
+      "protects": "signature verification; local sign only for LocalTestSigner"
+    },
+    {
+      "file": "src/modules/payments/webhook-signature.ts",
+      "imports": ["createHmac", "timingSafeEqual"],
+      "algorithms": ["HMAC-SHA256"],
+      "purpose": "Verify provider webhook signatures",
+      "protects": "webhook authenticity"
+    },
+    {
+      "file": "src/modules/transfers/transfers.service.ts",
+      "imports": ["randomUUID"],
+      "algorithms": ["CSPRNG"],
+      "purpose": "Transfer ids",
+      "protects": "unique transfer identifiers"
+    },
+    {
+      "file": "src/modules/users/password-hasher.ts",
+      "imports": ["argon2", "randomBytes", "timingSafeEqual"],
+      "algorithms": ["argon2id"],
+      "purpose": "Password hashing and verify (PHC string)",
+      "protects": "user passwords at rest"
+    },
+    {
+      "file": "src/modules/users/users.service.ts",
+      "imports": ["randomBytes"],
+      "algorithms": ["CSPRNG"],
+      "purpose": "Dummy password hash material for timing-safe unknown-user login",
+      "protects": "login timing side-channel mitigation"
+    }
+  ]
+}

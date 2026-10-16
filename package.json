@@ -31,11 +31,11 @@
     "job:reconcile": "tsx scripts/reconcile.ts",
     "job:purge-idempotency-keys": "tsx scripts/purge-idempotency-keys.ts",
     "rotate:key": "tsx scripts/rotate-signing-key.ts",
-
     "postman:build": "tsx scripts/postman/build-collection.ts",
     "postman:check": "tsx scripts/postman/check-coverage.ts",
     "postman:env": "tsx scripts/postman/build-env.ts",
-    "postman:test": "newman run postman/fintech-monolith.postman_collection.json -e postman/environments/dev.local.postman_environment.json --env-var freshUser=true --bail"
+    "postman:test": "newman run postman/fintech-monolith.postman_collection.json -e postman/environments/dev.local.postman_environment.json --env-var freshUser=true --bail",
+    "cbom:check": "tsx scripts/cbom-check.ts"
   },
   "dependencies": {
     "@aws-sdk/client-kms": "3.1152.0",
