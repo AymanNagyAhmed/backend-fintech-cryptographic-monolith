@@ -10,6 +10,7 @@ import {
   type Signer,
   type SigningAlg,
 } from './signer.js';
+import { SigningKeysService } from './signing-keys.service.js';
 
 /** Decoded bytes of a canonical standard-base64 signature with the algorithm's length, else null. */
 function signatureBytes(alg: SigningAlg, sig: unknown): Buffer | null {
@@ -34,7 +35,8 @@ function wellFormed(value: unknown): SignatureEnvelope | null {
  * adapter and holds every adapter to the same contract: a new signature must use SIGNING_ALG
  * and name the requested key with a version; a malformed signature never reaches an adapter
  * and verifies as false. Verification accepts any registered algorithm so a config switch
- * keeps older artifacts verifiable.
+ * keeps older artifacts verifiable. A key with `revokedAt` set in `crypto.signing_keys` is
+ * refused (A-B8.6); accepting pre-revocation material via an external time anchor is A-B10.
  */
 @Injectable()
 export class SignerService implements Signer {
@@ -42,6 +44,7 @@ export class SignerService implements Signer {
 
   constructor(
     @Inject(SIGNER_BACKEND) private readonly backend: Signer,
+    private readonly signingKeys: SigningKeysService,
     config: ConfigService<EnvironmentVariables, true>,
   ) {
     this.signingAlg = config.get('SIGNING_ALG', { infer: true });
@@ -71,6 +74,8 @@ export class SignerService implements Signer {
   ): Promise<boolean> {
     const envelope = wellFormed(signature);
     if (!envelope) return false;
+    const published = await this.signingKeys.find(envelope.keyId);
+    if (published?.revokedAt != null) return false;
     return (await this.backend.verify(bytes, envelope)) === true;
   }
 }
