@@ -1,14 +1,24 @@
+const send = vi.fn().mockResolvedValue({ ETag: '"abc"' });
+
+vi.mock('@aws-sdk/client-s3', () => ({
+  S3Client: class {
+    send = send;
+  },
+  PutObjectCommand: class {
+    input: unknown;
+    constructor(input: unknown) {
+      this.input = input;
+    }
+  },
+}));
+
 import { WormService } from './worm.service.js';
 
-vi.mock('@aws-sdk/client-s3', () => {
-  const send = vi.fn().mockResolvedValue({ ETag: '"abc"' });
-  return {
-    S3Client: vi.fn().mockImplementation(() => ({ send })),
-    PutObjectCommand: vi.fn().mockImplementation((input) => input),
-  };
-});
-
 describe('WormService', () => {
+  beforeEach(() => {
+    send.mockClear();
+  });
+
   it('puts a JSON batch with Object Lock compliance headers', async () => {
     const prisma = {
       treeHead: {
@@ -52,5 +62,6 @@ describe('WormService', () => {
     const result = await service.putBatch(2);
     expect(result.key).toBe('checkpoints/treeSize=2/batch.json');
     expect(result.skipped).toBe(false);
+    expect(send).toHaveBeenCalledOnce();
   });
 });
