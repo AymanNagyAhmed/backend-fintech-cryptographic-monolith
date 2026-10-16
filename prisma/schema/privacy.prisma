@@ -1,0 +1,15 @@
+// Per-subject encrypted PII vault (A-B11.2). Ciphertext from OpenBao Transit subject keys;
+// after erasure the key is destroyed and rows become unreadable (2.8).
+model SubjectPii {
+  id              String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  subjectRef      String   @map("subject_ref") @db.Uuid
+  field           String   @db.VarChar(64)
+  ciphertext      String   @db.Text
+  ciphertextHash  String   @map("ciphertext_hash") @db.Char(64)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([subjectRef, field])
+  @@index([ciphertextHash])
+  @@map("subject_pii")
+  @@schema("privacy")
+}

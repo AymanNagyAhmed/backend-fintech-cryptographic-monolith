@@ -11,4 +11,9 @@ export const AuditEnvelopeFields = {
   actor: ActorSchema,
   requestId: z.string().min(1).max(64).optional(),
   partitionKey: z.string().min(1).max(64).optional(),
+  /** SHA-256 of Transit ciphertext for a PII field (A-B11.2); never plaintext. */
+  ciphertextHash: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/)
+    .optional(),
 } as const;
