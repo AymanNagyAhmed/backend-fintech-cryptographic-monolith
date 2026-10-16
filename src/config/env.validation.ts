@@ -121,6 +121,14 @@ export class EnvironmentVariables {
   })
   TRANSFER_DAILY_LIMIT_BTC: string = '1.00000000';
 
+  // Hours after TOTP confirmation before an allow-listed beneficiary becomes usable (A-B13.1)
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(720)
+  BENEFICIARY_ACTIVATION_DELAY_HOURS: number = 24;
+
   // Cron pattern (5 or 6 fields, UTC) of the nightly ledger reconciliation job
   @IsOptional()
   @Matches(CRON, { message: '$property must be a cron pattern like 0 1 * * *' })

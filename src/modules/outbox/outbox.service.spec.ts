@@ -22,7 +22,7 @@ describe('OutboxService.enqueue', () => {
     amount: '10.50',
   };
 
-  it.each(['auth', 'wallet', 'ledger', 'payments'] as const)(
+  it.each(['auth', 'wallet', 'ledger', 'payments', 'withdrawals'] as const)(
     'prepares the payload and inserts into %s.outbox',
     async (context) => {
       const create = vi.fn().mockResolvedValue({ id: 'out-1' });
@@ -31,6 +31,7 @@ describe('OutboxService.enqueue', () => {
         walletOutbox: { create },
         ledgerOutbox: { create },
         paymentsOutbox: { create },
+        withdrawalsOutbox: { create },
       };
       const service = new OutboxService();
       await expect(service.enqueue(tx as never, context, event)).resolves.toBe(

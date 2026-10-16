@@ -4,4 +4,5 @@ SELECT
   + (SELECT count(*)::int FROM wallet.outbox WHERE processed_at IS NULL)
   + (SELECT count(*)::int FROM ledger.outbox WHERE processed_at IS NULL)
   + (SELECT count(*)::int FROM payments.outbox WHERE processed_at IS NULL)
+  + (SELECT count(*)::int FROM withdrawals.outbox WHERE processed_at IS NULL)
   AS lag;

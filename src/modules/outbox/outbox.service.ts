@@ -66,6 +66,8 @@ export class OutboxService {
         return tx.ledgerOutbox;
       case 'payments':
         return tx.paymentsOutbox;
+      case 'withdrawals':
+        return tx.withdrawalsOutbox;
     }
   }
 }
