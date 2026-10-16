@@ -5,7 +5,7 @@ import { auditLeafDigest, merkleHashToHex, merkleRoot } from './merkle.js';
 describe('ProofsService.inclusionProofForEvent', () => {
   it('throws when the event is missing', async () => {
     const prisma = {
-      auditEvent: { findUnique: vi.fn().mockResolvedValue(null) },
+      auditEvent: { findFirst: vi.fn().mockResolvedValue(null) },
     };
     const service = new ProofsService(prisma as never);
     await expect(service.inclusionProofForEvent('missing')).rejects.toBeInstanceOf(
@@ -23,7 +23,7 @@ describe('ProofsService.inclusionProofForEvent', () => {
     const rootHash = merkleHashToHex(merkleRoot(digests, true));
     const prisma = {
       auditEvent: {
-        findUnique: vi.fn().mockResolvedValue(leaves[1]),
+        findFirst: vi.fn().mockResolvedValue(leaves[1]),
         findMany: vi.fn().mockResolvedValue(leaves),
       },
       treeHead: {

@@ -21,7 +21,8 @@ export const OWNERSHIP: Readonly<Record<string, readonly string[]>> = {
   // Chainer reads context outboxes (via audit.claim_outbox_row) and writes audit_events.
   audit: ['audit', 'auth', 'wallet', 'ledger', 'payments'],
   checkpoints: ['audit'],
-  privacy: ['privacy'],
+  // PII scanner reads audit payloads (A-B11.5)
+  privacy: ['privacy', 'audit'],
   // Search/export reads audit leaves; owns compliance schema for future export metadata
   compliance: ['compliance', 'audit'],
   reserves: ['reserves'],

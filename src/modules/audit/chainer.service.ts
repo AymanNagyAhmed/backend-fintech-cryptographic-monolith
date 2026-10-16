@@ -75,13 +75,8 @@ export class ChainerService {
     );
     if (!locked) return 'skipped';
 
-    const existing = await tx.auditEvent.findUnique({
-      where: {
-        sourceContext_sourceId: {
-          sourceContext: context,
-          sourceId,
-        },
-      },
+    const existing = await tx.auditEvent.findFirst({
+      where: { sourceContext: context, sourceId },
     });
     if (!existing) {
       const tip = await tx.auditEvent.findFirst({
