@@ -1,12 +1,10 @@
 import { Module } from '@nestjs/common';
+import { signerBackendProvider } from './signer-backend.provider.js';
 import { SignerService } from './signer.service.js';
 
-/**
- * Signing through KMS / OpenBao Transit (2.6, 2.7); owns the crypto schema. The SIGNER_BACKEND
- * adapter is provided with the adapters (A-B8.2); until then this module is not imported.
- */
+/** Signing through KMS / OpenBao Transit (2.6, 2.7); owns the crypto schema. */
 @Module({
-  providers: [SignerService],
+  providers: [signerBackendProvider, SignerService],
   exports: [SignerService],
 })
 export class CryptoModule {}

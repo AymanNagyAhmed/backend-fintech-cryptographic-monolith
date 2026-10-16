@@ -26,6 +26,7 @@ const LIMIT_BTC = /^(?!0+(\.0+)?$)\d{1,12}(\.\d{1,8})?$/;
 
 export const NODE_ENVS = ['development', 'test', 'production'] as const;
 export const SIGNING_ALGS = ['ed25519', 'ecdsa-p256', 'ml-dsa-65'] as const;
+export const SIGNER_BACKENDS = ['openbao', 'aws-kms', 'local'] as const;
 
 export class EnvironmentVariables {
   @IsIn(NODE_ENVS)
@@ -145,8 +146,15 @@ export class EnvironmentVariables {
   @NotEquals(PLACEHOLDER)
   BAO_TOKEN: string;
 
-  @IsString()
-  @IsNotEmpty()
+  // Key store behind the Signer: OpenBao Transit (dev), AWS KMS (prod), in-memory keys (tests only)
+  @IsOptional()
+  @IsIn(SIGNER_BACKENDS)
+  SIGNER_BACKEND: (typeof SIGNER_BACKENDS)[number] = 'openbao';
+
+  // Transit key name, or the KMS alias without "alias/"
+  @Matches(/^[a-z0-9][a-z0-9_-]{0,63}$/, {
+    message: '$property must be 1-64 characters of a-z 0-9 _ -',
+  })
   SIGNING_KEY_NAME: string;
 
   @IsIn(SIGNING_ALGS)
@@ -186,12 +194,15 @@ export function validate(
 ): EnvironmentVariables {
   const env = plainToInstance(EnvironmentVariables, config);
   const errors = validateSync(env, { skipMissingProperties: false });
-  if (errors.length > 0) {
-    const lines = errors.map(
-      (e) =>
-        `  - ${e.property}: ${Object.values(e.constraints ?? {}).join('; ')}`,
+  const lines = errors.map(
+    (e) =>
+      `  - ${e.property}: ${Object.values(e.constraints ?? {}).join('; ')}`,
+  );
+  if (env.NODE_ENV === 'production' && env.SIGNER_BACKEND === 'local')
+    lines.push(
+      '  - SIGNER_BACKEND: local keeps keys in memory and is refused in production',
     );
+  if (lines.length > 0)
     throw new Error(`Invalid environment configuration:\n${lines.join('\n')}`);
-  }
   return env;
 }
