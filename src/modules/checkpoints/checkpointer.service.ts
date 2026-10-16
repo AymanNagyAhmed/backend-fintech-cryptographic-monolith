@@ -1,40 +1,52 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { EnvironmentVariables } from '../../config/env.validation.js';
 import { PrismaService } from '../../database/prisma.service.js';
+import { Prisma } from '../../generated/prisma/client.js';
+import { SignerService } from '../crypto/signer.service.js';
 import {
   auditLeafDigest,
   merkleHashToHex,
   merkleRoot,
 } from './merkle.js';
+import {
+  sthCanonicalBytes,
+  sthContentHash,
+  type SthPayload,
+} from './sth-payload.js';
 
 export interface CheckpointBuildResult {
-  /** Number of audit leaves included in this tree. */
   treeSize: number;
   rootHash: string;
-  /** First / last event id in seq order across all partitions (empty when treeSize=0). */
   fromEventId: string | null;
   toEventId: string | null;
   empty: boolean;
+  /** Set when a new STH row was inserted (or already existed for this treeSize). */
+  sthId?: string;
+  skipped?: boolean;
 }
 
 /**
- * Builds an RFC 6962 Merkle tree over chained audit leaves (A-B10.1).
- * Leaves are ordered by (created_at, id) globally so successive checkpoints
- * grow a single append-only tree. Persistence of the signed tree head is A-B10.2.
+ * Builds an RFC 6962 Merkle tree over chained audit leaves and persists a signed
+ * tree head when the tree grew (A-B10.1 / A-B10.2).
  */
 @Injectable()
 export class CheckpointerService {
   private readonly logger = new Logger(CheckpointerService.name);
+  private readonly keyRef: string;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly signer: SignerService,
+    config: ConfigService<EnvironmentVariables, true>,
+  ) {
+    this.keyRef = config.get('SIGNING_KEY_NAME', { infer: true });
+  }
 
-  /**
-   * Build a Merkle root over the first `limit` audit events (or all if omitted).
-   * Used by the worker and by later STH signing.
-   */
-  async build(limit?: number): Promise<CheckpointBuildResult> {
+  /** Build Merkle root over all audit events (ordered) and sign a new STH if grown. */
+  async build(): Promise<CheckpointBuildResult> {
     const rows = await this.prisma.auditEvent.findMany({
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      ...(limit !== undefined ? { take: limit } : {}),
       select: { id: true, hash: true },
     });
     if (rows.length === 0) {
@@ -47,18 +59,88 @@ export class CheckpointerService {
       };
     }
     const digests = rows.map((r) => auditLeafDigest(r.hash));
-    const root = merkleRoot(digests, true);
-    const result: CheckpointBuildResult = {
-      treeSize: rows.length,
-      rootHash: merkleHashToHex(root),
-      fromEventId: rows[0]!.id,
-      toEventId: rows[rows.length - 1]!.id,
-      empty: false,
+    const rootHash = merkleHashToHex(merkleRoot(digests, true));
+    const treeSize = rows.length;
+    const latest = await this.prisma.treeHead.findFirst({
+      orderBy: { treeSize: 'desc' },
+    });
+    if (latest && latest.treeSize >= treeSize) {
+      return {
+        treeSize,
+        rootHash,
+        fromEventId: rows[0]!.id,
+        toEventId: rows[rows.length - 1]!.id,
+        empty: false,
+        sthId: latest.id,
+        skipped: true,
+      };
+    }
+
+    const previousPayload: SthPayload | null = latest
+      ? {
+          treeSize: latest.treeSize,
+          rootHash: latest.rootHash,
+          timestamp: latest.timestamp.toISOString(),
+          previousSthHash: latest.previousSthHash,
+        }
+      : null;
+    const timestamp = new Date();
+    const payload: SthPayload = {
+      treeSize,
+      rootHash,
+      timestamp: timestamp.toISOString(),
+      previousSthHash: previousPayload
+        ? sthContentHash(previousPayload)
+        : null,
     };
-    this.logger.log(
-      { treeSize: result.treeSize, rootHash: result.rootHash },
-      'Merkle checkpoint built',
+    const envelope = await this.signer.sign(
+      sthCanonicalBytes(payload),
+      this.keyRef,
     );
-    return result;
+
+    try {
+      const row = await this.prisma.treeHead.create({
+        data: {
+          treeSize,
+          rootHash,
+          timestamp,
+          previousSthHash: payload.previousSthHash,
+          alg: envelope.alg,
+          keyId: envelope.keyId,
+          signature: envelope.sig,
+        },
+      });
+      this.logger.log(
+        { treeSize, rootHash, sthId: row.id },
+        'Signed tree head stored',
+      );
+      return {
+        treeSize,
+        rootHash,
+        fromEventId: rows[0]!.id,
+        toEventId: rows[rows.length - 1]!.id,
+        empty: false,
+        sthId: row.id,
+      };
+    } catch (e) {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
+        const existing = await this.prisma.treeHead.findUniqueOrThrow({
+          where: { treeSize },
+        });
+        return {
+          treeSize,
+          rootHash: existing.rootHash,
+          fromEventId: rows[0]!.id,
+          toEventId: rows[rows.length - 1]!.id,
+          empty: false,
+          sthId: existing.id,
+          skipped: true,
+        };
+      }
+      throw e;
+    }
   }
 }
