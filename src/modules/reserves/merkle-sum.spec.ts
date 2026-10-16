@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { hashLeaf, merkleHashToHex } from '../checkpoints/merkle.js';
+import { hashLeaf, merkleHashToHex } from '../../common/crypto/merkle.js';
 import {
   buildMerkleSumTree,
   leafPreimage,

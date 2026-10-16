@@ -1,7 +1,7 @@
 import { Money } from '../../common/money/money.js';
 import type { PrismaService } from '../../database/prisma.service.js';
 import { Prisma } from '../../generated/prisma/client.js';
-import { merkleHashToHex } from '../checkpoints/merkle.js';
+import { merkleHashToHex } from '../../common/crypto/merkle.js';
 import type { WalletsService } from '../wallets/wallets.service.js';
 import {
   buildMerkleSumTree,

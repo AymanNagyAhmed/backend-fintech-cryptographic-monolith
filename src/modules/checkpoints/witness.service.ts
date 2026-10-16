@@ -4,7 +4,7 @@ import {
   auditLeafDigest,
   merkleHashToHex,
   merkleRoot,
-} from './merkle.js';
+} from '../../common/crypto/merkle.js';
 import { sthContentHash, type SthPayload } from './sth-payload.js';
 
 export interface WitnessReport {

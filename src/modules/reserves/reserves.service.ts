@@ -18,7 +18,7 @@ import {
   sumInclusionProof,
   type MerkleSumLeaf,
 } from './merkle-sum.js';
-import { merkleHashToHex } from '../checkpoints/merkle.js';
+import { merkleHashToHex } from '../../common/crypto/merkle.js';
 
 const UNIQUE_VIOLATION = 'P2002';
 /** Keeps one INSERT well below the PostgreSQL bind parameter limit. */

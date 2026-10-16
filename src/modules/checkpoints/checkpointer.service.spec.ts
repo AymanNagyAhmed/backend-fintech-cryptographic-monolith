@@ -2,7 +2,7 @@ import type { ConfigService } from '@nestjs/config';
 import type { EnvironmentVariables } from '../../config/env.validation.js';
 import type { SignerService } from '../crypto/signer.service.js';
 import { CheckpointerService } from './checkpointer.service.js';
-import { auditLeafDigest, merkleHashToHex, merkleRoot } from './merkle.js';
+import { auditLeafDigest, merkleHashToHex, merkleRoot } from '../../common/crypto/merkle.js';
 import type { TsaService } from './tsa.service.js';
 import type { WormService } from './worm.service.js';
 

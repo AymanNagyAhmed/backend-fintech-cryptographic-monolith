@@ -11,7 +11,7 @@ import {
   merkleHashToHex,
   merkleRoot,
   verifyInclusion,
-} from './merkle.js';
+} from '../../common/crypto/merkle.js';
 
 export interface InclusionProofResult {
   eventId: string;

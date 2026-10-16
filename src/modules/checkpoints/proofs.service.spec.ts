@@ -1,6 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { ProofsService } from './proofs.service.js';
-import { auditLeafDigest, merkleHashToHex, merkleRoot } from './merkle.js';
+import { auditLeafDigest, merkleHashToHex, merkleRoot } from '../../common/crypto/merkle.js';
 
 describe('ProofsService.inclusionProofForEvent', () => {
   it('throws when the event is missing', async () => {
