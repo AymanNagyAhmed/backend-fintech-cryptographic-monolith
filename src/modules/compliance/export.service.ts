@@ -13,7 +13,7 @@ import {
   auditLeafDigest,
   inclusionProof,
   merkleHashToHex,
-} from '../checkpoints/merkle.js';
+} from '../../common/crypto/merkle.js';
 import { ExportWormService } from './export-worm.service.js';
 
 export interface ExportRequest {

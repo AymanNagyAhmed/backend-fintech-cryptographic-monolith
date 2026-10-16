@@ -1,5 +1,5 @@
 import { WitnessService } from './witness.service.js';
-import { auditLeafDigest, merkleHashToHex, merkleRoot } from './merkle.js';
+import { auditLeafDigest, merkleHashToHex, merkleRoot } from '../../common/crypto/merkle.js';
 import { sthContentHash } from './sth-payload.js';
 
 describe('WitnessService', () => {

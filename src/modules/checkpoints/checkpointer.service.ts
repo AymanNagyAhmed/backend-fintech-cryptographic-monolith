@@ -8,7 +8,7 @@ import {
   auditLeafDigest,
   merkleHashToHex,
   merkleRoot,
-} from './merkle.js';
+} from '../../common/crypto/merkle.js';
 import {
   sthCanonicalBytes,
   sthContentHash,

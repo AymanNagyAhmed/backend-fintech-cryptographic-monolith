@@ -6,9 +6,9 @@ import {
   largestPowerOfTwoLessThan,
   merkleHashToHex,
   type MerkleHash,
-} from '../checkpoints/merkle.js';
+} from '../../common/crypto/merkle.js';
 
-/** Same interior-node prefix as RFC 6962 (checkpoints/merkle.ts); leaves use hashLeaf's 0x00. */
+/** Same interior-node prefix as RFC 6962 (common/crypto/merkle.ts); leaves use hashLeaf's 0x00. */
 const NODE_PREFIX = Buffer.from([0x01]);
 
 /** Tree node: commitment hash plus the sum of all balances below it, a decimal string. */
