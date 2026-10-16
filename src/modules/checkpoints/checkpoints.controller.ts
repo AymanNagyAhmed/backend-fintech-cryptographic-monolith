@@ -25,17 +25,57 @@ import { Roles } from '../auth/decorators/roles.decorator.js';
 import { AuditAccessService } from '../audit/audit-access.service.js';
 import { ConsistencyProofDto } from './dto/consistency-proof.dto.js';
 import { InclusionProofDto } from './dto/inclusion-proof.dto.js';
+import { TreeHeadDto } from './dto/tree-head.dto.js';
 import { ProofsService } from './proofs.service.js';
+import { SthService } from './sth.service.js';
 
 @ApiTags('Audit')
 @ApiBearerAuth()
-@ApiExtraModels(InclusionProofDto, ConsistencyProofDto)
+@ApiExtraModels(InclusionProofDto, ConsistencyProofDto, TreeHeadDto)
 @Controller('audit')
 export class CheckpointsController {
   constructor(
     private readonly proofs: ProofsService,
+    private readonly sth: SthService,
     private readonly access: AuditAccessService,
   ) {}
+
+  @Get('sth/latest')
+  @Roles('compliance', 'admin')
+  @ResponseMessage('Latest signed tree head')
+  @ApiOperation({
+    operationId: 'audit.sthLatest',
+    summary: 'Publish the latest signed Merkle tree head',
+  })
+  @ApiOkEnvelope({ $ref: getSchemaPath(TreeHeadDto) })
+  @ApiFailureResponse(401, 'Missing or invalid access token')
+  @ApiFailureResponse(403, 'Requires compliance or admin with MFA')
+  @ApiFailureResponse(404, 'No STH published yet')
+  async sthLatest(@CurrentUser() user: AuthUser): Promise<TreeHeadDto> {
+    const result = await this.sth.latest();
+    await this.access.record(user.id, 'proof', 'sth=latest');
+    return result;
+  }
+
+  @Get('sth/:treeSize')
+  @Roles('compliance', 'admin')
+  @ResponseMessage('Signed tree head')
+  @ApiOperation({
+    operationId: 'audit.sthBySize',
+    summary: 'Publish the STH for a given tree size',
+  })
+  @ApiOkEnvelope({ $ref: getSchemaPath(TreeHeadDto) })
+  @ApiFailureResponse(401, 'Missing or invalid access token')
+  @ApiFailureResponse(403, 'Requires compliance or admin with MFA')
+  @ApiFailureResponse(404, 'STH not found')
+  async sthBySize(
+    @CurrentUser() user: AuthUser,
+    @Param('treeSize', ParseIntPipe) treeSize: number,
+  ): Promise<TreeHeadDto> {
+    const result = await this.sth.byTreeSize(treeSize);
+    await this.access.record(user.id, 'proof', `sth=${treeSize}`);
+    return result;
+  }
 
   @Get('proof/:eventId')
   @Roles('compliance', 'admin')
