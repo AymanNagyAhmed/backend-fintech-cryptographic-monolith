@@ -22,7 +22,8 @@ export const OWNERSHIP: Readonly<Record<string, readonly string[]>> = {
   audit: ['audit', 'auth', 'wallet', 'ledger', 'payments'],
   checkpoints: ['audit'],
   privacy: ['privacy'],
-  compliance: ['compliance'],
+  // Search/export reads audit leaves; owns compliance schema for future export metadata
+  compliance: ['compliance', 'audit'],
   reserves: ['reserves'],
 };
 
