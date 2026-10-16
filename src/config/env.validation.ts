@@ -133,6 +133,20 @@ export class EnvironmentVariables {
   })
   IDEMPOTENCY_PURGE_CRON: string = '30 1 * * *';
 
+  // Outbox -> audit_events drain (BullMQ). Default every 5 seconds (6-field cron).
+  @IsOptional()
+  @Matches(CRON, {
+    message: '$property must be a cron pattern like */5 * * * * *',
+  })
+  CHAINER_CRON: string = '*/5 * * * * *';
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  CHAINER_BATCH_SIZE: number = 50;
+
   @IsString()
   @MinLength(32)
   @NotEquals(PLACEHOLDER)

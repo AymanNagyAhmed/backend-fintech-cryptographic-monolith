@@ -28,6 +28,7 @@ import { PaymentsModule } from './modules/payments/payments.module.js';
 import { CryptoModule } from './modules/crypto/crypto.module.js';
 import { OutboxModule } from './modules/outbox/outbox.module.js';
 import { AuditModule } from './modules/audit/audit.module.js';
+import { AuditJobsModule } from './modules/audit/jobs/audit-jobs.module.js';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { AuditModule } from './modules/audit/audit.module.js';
     PaymentsModule,
     CryptoModule,
     AuditModule,
+    AuditJobsModule,
     IdempotencyJobsModule,
   ],
   controllers: [AppController],
