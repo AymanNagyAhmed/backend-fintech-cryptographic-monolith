@@ -127,7 +127,11 @@ export class ExportService {
         }
       : null;
 
-    const manifest = {
+    const recordsBody = JSON.stringify(records);
+    const proofsBody = JSON.stringify(proofs);
+    const sthBody = JSON.stringify(sthJson);
+    const keysBody = JSON.stringify(publicKeys);
+    const manifestBody = {
       createdAt: new Date().toISOString(),
       recordCount: records.length,
       filter: req,
@@ -138,11 +142,13 @@ export class ExportService {
         'public-keys.json',
         'manifest.json',
       ],
-      recordsSha256: shaJson(records),
-      proofsSha256: shaJson(proofs),
-      sthSha256: shaJson(sthJson),
+      recordsSha256: sha(recordsBody),
+      proofsSha256: sha(proofsBody),
+      sthSha256: sha(sthBody),
+      publicKeysSha256: sha(keysBody),
     };
-    const manifestSha256 = shaJson(manifest);
+    const manifestSha256 = sha(JSON.stringify(manifestBody));
+    const manifestFile = JSON.stringify({ ...manifestBody, manifestSha256 });
 
     await mkdir(this.outDir, { recursive: true });
     const path = join(
@@ -150,15 +156,11 @@ export class ExportService {
       `export-${Date.now()}-${manifestSha256.slice(0, 12)}.zip`,
     );
     await writeZip(path, {
-      'records.json': JSON.stringify(records, null, 2),
-      'proofs.json': JSON.stringify(proofs, null, 2),
-      'sth.json': JSON.stringify(sthJson, null, 2),
-      'public-keys.json': JSON.stringify(publicKeys, null, 2),
-      'manifest.json': JSON.stringify(
-        { ...manifest, manifestSha256 },
-        null,
-        2,
-      ),
+      'records.json': recordsBody,
+      'proofs.json': proofsBody,
+      'sth.json': sthBody,
+      'public-keys.json': keysBody,
+      'manifest.json': manifestFile,
     });
 
     await this.access.record(
@@ -171,10 +173,8 @@ export class ExportService {
   }
 }
 
-function shaJson(value: unknown): string {
-  return createHash('sha256')
-    .update(JSON.stringify(value))
-    .digest('hex');
+function sha(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
 function writeZip(
