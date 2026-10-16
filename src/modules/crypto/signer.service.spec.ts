@@ -5,11 +5,19 @@ import { LocalTestSigner } from './adapters/local-test.signer.js';
 import { SignerContractException } from './exceptions/signer-contract.exception.js';
 import type { SignatureEnvelope, Signer, SigningAlg } from './signer.js';
 import { SignerService } from './signer.service.js';
+import type { SigningKeysService } from './signing-keys.service.js';
 
 function configOf(alg: SigningAlg): ConfigService<EnvironmentVariables, true> {
   return {
     get: () => alg,
   } as unknown as ConfigService<EnvironmentVariables, true>;
+}
+
+/** Catalog stub: unknown keys are not revoked (same as an empty `crypto.signing_keys`). */
+function keysStub(
+  find: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue(null),
+): SigningKeysService {
+  return { find } as unknown as SigningKeysService;
 }
 
 // Test double for an adapter: an Ed25519 key generated per run, never stored
@@ -27,7 +35,7 @@ const backend = {
   ),
 } satisfies Signer;
 
-const service = new SignerService(backend, configOf('ed25519'));
+const service = new SignerService(backend, keysStub(), configOf('ed25519'));
 const message = new TextEncoder().encode('tree_size=42');
 
 describe('SignerService', () => {
@@ -107,7 +115,11 @@ describe('SignerService', () => {
   });
 
   it('throws when the adapter alg does not match SIGNING_ALG', async () => {
-    const strict = new SignerService(backend, configOf('ml-dsa-65'));
+    const strict = new SignerService(
+      backend,
+      keysStub(),
+      configOf('ml-dsa-65'),
+    );
     await expect(strict.sign(message, 'audit-signing')).rejects.toThrow(
       /signed with ed25519, configured SIGNING_ALG is ml-dsa-65/,
     );
@@ -115,17 +127,22 @@ describe('SignerService', () => {
 
   it('still verifies a registered alg after SIGNING_ALG switches', async () => {
     const envelope = await service.sign(message, 'audit-signing');
-    const switched = new SignerService(backend, configOf('ml-dsa-65'));
+    const switched = new SignerService(
+      backend,
+      keysStub(),
+      configOf('ml-dsa-65'),
+    );
     expect(await switched.verify(message, envelope)).toBe(true);
   });
 
   it('after rotate to ml-dsa-65 by config, both old and new signatures verify', async () => {
     // OpenBao has no ML-DSA; LocalTestSigner stands in for the crypto-agility switch (2.7).
     const local = new LocalTestSigner('ed25519', 'test');
-    const ed = new SignerService(local, configOf('ed25519'));
+    const catalog = keysStub();
+    const ed = new SignerService(local, catalog, configOf('ed25519'));
     const v1 = await ed.sign(message, 'audit-signing');
     local.rotate('audit-signing', 'ml-dsa-65');
-    const pq = new SignerService(local, configOf('ml-dsa-65'));
+    const pq = new SignerService(local, catalog, configOf('ml-dsa-65'));
     const v2 = await pq.sign(message, 'audit-signing');
     expect(v1).toMatchObject({ alg: 'ed25519', keyId: 'audit-signing:v1' });
     expect(v2).toMatchObject({ alg: 'ml-dsa-65', keyId: 'audit-signing:v2' });
@@ -173,5 +190,59 @@ describe('SignerService', () => {
     await expect(service.verify(message, envelope)).rejects.toThrow(
       'OpenBao unreachable',
     );
+  });
+
+  it('rejects verify when the catalog marks the key revoked', async () => {
+    const find = vi.fn().mockResolvedValue({
+      keyId: 'audit-signing:v1',
+      version: 1,
+      alg: 'ed25519',
+      publicKey: 'unused',
+      activatedAt: '2026-10-16T12:00:00.000Z',
+      revokedAt: '2026-10-16T18:00:00.000Z',
+    });
+    const revoked = new SignerService(
+      backend,
+      keysStub(find),
+      configOf('ed25519'),
+    );
+    const envelope = await revoked.sign(message, 'audit-signing');
+    vi.clearAllMocks();
+    expect(await revoked.verify(message, envelope)).toBe(false);
+    expect(backend.verify).not.toHaveBeenCalled();
+    expect(find).toHaveBeenCalledWith('audit-signing:v1');
+  });
+
+  it('still verifies when the catalog lists the key without revokedAt', async () => {
+    const find = vi.fn().mockResolvedValue({
+      keyId: 'audit-signing:v1',
+      version: 1,
+      alg: 'ed25519',
+      publicKey: 'unused',
+      activatedAt: '2026-10-16T12:00:00.000Z',
+      revokedAt: null,
+    });
+    const active = new SignerService(
+      backend,
+      keysStub(find),
+      configOf('ed25519'),
+    );
+    const envelope = await active.sign(message, 'audit-signing');
+    expect(await active.verify(message, envelope)).toBe(true);
+    expect(backend.verify).toHaveBeenCalled();
+  });
+
+  it('lets catalog lookup failures propagate instead of verifying false', async () => {
+    const find = vi.fn().mockRejectedValue(new Error('postgres down'));
+    const broken = new SignerService(
+      backend,
+      keysStub(find),
+      configOf('ed25519'),
+    );
+    const envelope = await broken.sign(message, 'audit-signing');
+    await expect(broken.verify(message, envelope)).rejects.toThrow(
+      'postgres down',
+    );
+    expect(backend.verify).not.toHaveBeenCalled();
   });
 });

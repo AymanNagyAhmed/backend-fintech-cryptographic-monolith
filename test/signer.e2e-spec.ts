@@ -14,12 +14,18 @@ import type {
   SigningAlg,
 } from '../src/modules/crypto/signer.js';
 import { SignerService } from '../src/modules/crypto/signer.service.js';
+import { SigningKeysService } from '../src/modules/crypto/signing-keys.service.js';
 
 function configOf(alg: SigningAlg): ConfigService<EnvironmentVariables, true> {
   return {
     get: () => alg,
   } as unknown as ConfigService<EnvironmentVariables, true>;
 }
+
+/** Empty catalog: these cases never publish keys, so revocation does not apply. */
+const noCatalog = {
+  find: async () => null,
+} as unknown as SigningKeysService;
 
 // Needs the Compose OpenBao (`make up`) with Transit enabled (plan A-B1.9) and BAO_TOKEN =
 // the dev root token in .env (SIGNER_BACKEND=openbao). Creates its own keys and deletes them.
@@ -63,7 +69,10 @@ describe('Signer with OpenBao Transit (e2e)', () => {
         ConfigModule.forRoot({ isGlobal: true, validate }),
         CryptoModule,
       ],
-    }).compile();
+    })
+      .overrideProvider(SigningKeysService)
+      .useValue(noCatalog)
+      .compile();
     openbao = new OpenBaoTransitSigner(
       process.env.BAO_ADDR ?? '',
       process.env.BAO_TOKEN ?? '',
@@ -87,7 +96,7 @@ describe('Signer with OpenBao Transit (e2e)', () => {
 
     beforeAll(async () => {
       // New signatures must match SIGNING_ALG; OpenBao has no ML-DSA key type.
-      signer = new SignerService(openbao, configOf(type));
+      signer = new SignerService(openbao, noCatalog, configOf(type));
       key = await newKey(type);
       v1 = await signer.sign(message, key);
     });
@@ -128,7 +137,7 @@ describe('Signer with OpenBao Transit (e2e)', () => {
 
   it('refuses to sign when the key alg does not match SIGNING_ALG', async () => {
     const key = await newKey('ecdsa-p256');
-    const signer = new SignerService(openbao, configOf('ed25519'));
+    const signer = new SignerService(openbao, noCatalog, configOf('ed25519'));
     await expect(signer.sign(message, key)).rejects.toThrow(
       /signed with ecdsa-p256, configured SIGNING_ALG is ed25519/,
     );
@@ -136,14 +145,18 @@ describe('Signer with OpenBao Transit (e2e)', () => {
 
   it('still verifies after SIGNING_ALG switches to another registered alg', async () => {
     const key = await newKey('ed25519');
-    const ed = new SignerService(openbao, configOf('ed25519'));
+    const ed = new SignerService(openbao, noCatalog, configOf('ed25519'));
     const envelope = await ed.sign(message, key);
-    const switched = new SignerService(openbao, configOf('ecdsa-p256'));
+    const switched = new SignerService(
+      openbao,
+      noCatalog,
+      configOf('ecdsa-p256'),
+    );
     expect(await switched.verify(message, envelope)).toBe(true);
   });
 
   it('verifies false for a key that does not exist', async () => {
-    const signer = new SignerService(openbao, configOf('ed25519'));
+    const signer = new SignerService(openbao, noCatalog, configOf('ed25519'));
     const key = await newKey('ed25519');
     const signature = await signer.sign(message, key);
     expect(
@@ -152,7 +165,7 @@ describe('Signer with OpenBao Transit (e2e)', () => {
   });
 
   it('refuses to sign with a missing key or a non-signing key', async () => {
-    const signer = new SignerService(openbao, configOf('ed25519'));
+    const signer = new SignerService(openbao, noCatalog, configOf('ed25519'));
     await expect(signer.sign(message, 'e2e-missing')).rejects.toThrow(
       'Transit key e2e-missing not found',
     );
@@ -165,6 +178,7 @@ describe('Signer with OpenBao Transit (e2e)', () => {
   it('throws KeyStoreException, not false, when OpenBao is unreachable', async () => {
     const down = new SignerService(
       new OpenBaoTransitSigner('http://127.0.0.1:1', 'x'.repeat(20)),
+      noCatalog,
       configOf('ed25519'),
     );
     await expect(
@@ -180,6 +194,7 @@ describe('Signer with OpenBao Transit (e2e)', () => {
     const key = await newKey('ed25519');
     const denied = new SignerService(
       new OpenBaoTransitSigner(process.env.BAO_ADDR ?? '', 'x'.repeat(20)),
+      noCatalog,
       configOf('ed25519'),
     );
     await expect(denied.sign(message, key)).rejects.toThrow(/HTTP 403/);
@@ -192,6 +207,7 @@ describe('Signer with OpenBao Transit (e2e)', () => {
           Promise.resolve({ alg: 'ed25519', keyId: 'other:v1', sig: 'AA==' }),
         verify: () => Promise.resolve(true),
       },
+      noCatalog,
       configOf('ed25519'),
     );
     await expect(lying.sign(message, 'audit-signing')).rejects.toThrow(
