@@ -4,6 +4,7 @@ import {
   AuthUserLoginV1Schema,
   AuthUserRegisteredV1Schema,
 } from './schemas/auth.v1.js';
+import { ErasureCompletedV1Schema } from './schemas/erasure.v1.js';
 import { PaymentWebhookAcceptedV1Schema } from './schemas/payment.v1.js';
 import { TransferCompletedV1Schema } from './schemas/transfer.v1.js';
 import { WalletCreatedV1Schema } from './schemas/wallet.v1.js';
@@ -20,6 +21,7 @@ export const AUDIT_EVENT_SCHEMAS = {
   'transfer.completed': { 1: TransferCompletedV1Schema },
   'payment.webhook.accepted': { 1: PaymentWebhookAcceptedV1Schema },
   'audit.access': { 1: AuditAccessV1Schema },
+  'erasure.completed': { 1: ErasureCompletedV1Schema },
 } as const;
 
 export type AuditEventType = keyof typeof AUDIT_EVENT_SCHEMAS;
@@ -30,8 +32,8 @@ export type AuditEvent =
   | z.infer<typeof WalletCreatedV1Schema>
   | z.infer<typeof TransferCompletedV1Schema>
   | z.infer<typeof PaymentWebhookAcceptedV1Schema>
-  | z.infer<typeof AuditAccessV1Schema>;
-
+  | z.infer<typeof AuditAccessV1Schema>
+  | z.infer<typeof ErasureCompletedV1Schema>;
 
 export function schemaOf(
   type: string,
