@@ -14,6 +14,12 @@ import {
 } from './sth-receipts.constants.js';
 import { SthReceiptsProcessor } from './sth-receipts.processor.js';
 import { SthReceiptsScheduler } from './sth-receipts.scheduler.js';
+import {
+  WITNESS_JOB_OPTIONS,
+  WITNESS_QUEUE,
+} from './witness.constants.js';
+import { WitnessProcessor } from './witness.processor.js';
+import { WitnessScheduler } from './witness.scheduler.js';
 
 @Module({
   imports: [
@@ -26,6 +32,10 @@ import { SthReceiptsScheduler } from './sth-receipts.scheduler.js';
       name: STH_RECEIPTS_QUEUE,
       defaultJobOptions: STH_RECEIPTS_JOB_OPTIONS,
     }),
+    BullModule.registerQueue({
+      name: WITNESS_QUEUE,
+      defaultJobOptions: WITNESS_JOB_OPTIONS,
+    }),
   ],
   providers: [
     CheckpointerProcessor,
@@ -33,6 +43,8 @@ import { SthReceiptsScheduler } from './sth-receipts.scheduler.js';
     SthReceiptsService,
     SthReceiptsProcessor,
     SthReceiptsScheduler,
+    WitnessProcessor,
+    WitnessScheduler,
   ],
 })
 export class CheckpointJobsModule {}
