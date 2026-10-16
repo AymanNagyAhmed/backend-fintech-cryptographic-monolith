@@ -25,6 +25,7 @@ import { LedgerJobsModule } from './modules/ledger/jobs/ledger-jobs.module.js';
 import { LedgerModule } from './modules/ledger/ledger.module.js';
 import { TransfersModule } from './modules/transfers/transfers.module.js';
 import { PaymentsModule } from './modules/payments/payments.module.js';
+import { CryptoModule } from './modules/crypto/crypto.module.js';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { PaymentsModule } from './modules/payments/payments.module.js';
     LedgerJobsModule,
     TransfersModule,
     PaymentsModule,
+    CryptoModule,
     IdempotencyJobsModule,
   ],
   controllers: [AppController],

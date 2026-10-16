@@ -36,6 +36,7 @@
     "postman:test": "newman run postman/fintech-monolith.postman_collection.json -e postman/environments/dev.local.postman_environment.json --env-var freshUser=true --bail"
   },
   "dependencies": {
+    "@aws-sdk/client-kms": "3.1152.0",
     "@nestjs/bullmq": "12.0.0",
     "@nestjs/common": "^12.0.1",
     "@nestjs/config": "12.0.1",

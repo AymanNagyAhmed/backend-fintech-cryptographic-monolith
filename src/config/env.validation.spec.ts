@@ -71,6 +71,23 @@ describe('env validation', () => {
     expect(msg).toContain('- PORT:');
   });
 
+  it('defaults SIGNER_BACKEND to openbao and refuses an unknown backend', () => {
+    expect(validate(validEnv()).SIGNER_BACKEND).toBe('openbao');
+    expect(validate({ ...validEnv(), SIGNER_BACKEND: 'aws-kms' }).SIGNER_BACKEND).toBe('aws-kms');
+    expect(messageOf({ ...validEnv(), SIGNER_BACKEND: 'file' })).toContain('- SIGNER_BACKEND:');
+  });
+
+  it('refuses the local signer in production only', () => {
+    expect(validate({ ...validEnv(), SIGNER_BACKEND: 'local' }).SIGNER_BACKEND).toBe('local');
+    expect(
+      messageOf({ ...validEnv(), NODE_ENV: 'production', SIGNER_BACKEND: 'local' }),
+    ).toContain('- SIGNER_BACKEND: local keeps keys in memory and is refused in production');
+  });
+
+  it.each(['Audit', 'alias/audit-signing', 'audit signing', ''])('rejects SIGNING_KEY_NAME=%j', (name) => {
+    expect(messageOf({ ...validEnv(), SIGNING_KEY_NAME: name })).toContain('- SIGNING_KEY_NAME:');
+  });
+
   it('defaults TRUST_PROXY to 0 and accepts a hop count', () => {
     expect(validate(validEnv()).TRUST_PROXY).toBe(0);
     expect(validate({ ...validEnv(), TRUST_PROXY: '1' }).TRUST_PROXY).toBe(1);
