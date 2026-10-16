@@ -4,7 +4,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import archiver from 'archiver';
+import type { Archiver } from 'archiver';
 import type { EnvironmentVariables } from '../../config/env.validation.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { AuditAccessService } from '../audit/audit-access.service.js';
@@ -185,13 +185,22 @@ function sha(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
-function writeZip(
+/**
+ * archiver 8 is ESM with named exports only (`ZipArchive`); the installed @types/archiver
+ * still describes the v6 default export, so the class is typed here.
+ */
+type ZipArchiveCtor = new (options?: { zlib?: { level?: number } }) => Archiver;
+
+async function writeZip(
   path: string,
   files: Record<string, string>,
 ): Promise<void> {
+  const { ZipArchive } = (await import('archiver')) as unknown as {
+    ZipArchive: ZipArchiveCtor;
+  };
   return new Promise((resolve, reject) => {
     const output = createWriteStream(path);
-    const archive = archiver('zip', { zlib: { level: 9 } });
+    const archive = new ZipArchive({ zlib: { level: 9 } });
     output.on('close', () => resolve());
     archive.on('error', reject);
     archive.pipe(output);
