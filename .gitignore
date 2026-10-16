@@ -16,3 +16,6 @@ src/generated/
 
 # Postman environments with secrets (npm run postman:env)
 postman/environments/*.local.*
+
+# Local STH external receipts (A-B10.6)
+var/
