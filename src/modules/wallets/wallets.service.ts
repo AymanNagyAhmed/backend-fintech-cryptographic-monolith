@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { isCurrency, type Currency } from '../../common/money/currency.js';
+import { Money } from '../../common/money/money.js';
 import type { EnvironmentVariables } from '../../config/env.validation.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import {
@@ -222,6 +223,43 @@ export class WalletsService {
       where: { id, ownerUserId },
     });
     return wallet && toView(wallet);
+  }
+
+  /**
+   * Total balance per owner over all wallets of `currency` (any status), for the proof of
+   * reserves (A-B13.5). Reads wallets page by page (id cursor) and balances through the ledger.
+   * Balances are read without a global lock, so the figures are as of the scan, not one instant.
+   */
+  async sumBalancesByOwner(
+    currency: Currency,
+    pageSize = 1000,
+  ): Promise<Map<string, Money>> {
+    const totals = new Map<string, Money>();
+    let cursor: string | undefined;
+    for (;;) {
+      const wallets = await this.prisma.wallet.findMany({
+        where: { currency, ...(cursor ? { id: { gt: cursor } } : {}) },
+        orderBy: { id: 'asc' },
+        take: pageSize,
+      });
+      if (wallets.length === 0) return totals;
+      const balances = await this.ledger.getBalances(
+        wallets.map((w) => w.ledgerAccountId),
+      );
+      for (const w of wallets) {
+        const balance = balances.get(w.ledgerAccountId);
+        if (balance === undefined)
+          throw new Error(`Ledger account of wallet ${w.id} not found`);
+        totals.set(
+          w.ownerUserId,
+          (totals.get(w.ownerUserId) ?? Money.zero(currency)).add(
+            Money.of(balance, currency),
+          ),
+        );
+      }
+      if (wallets.length < pageSize) return totals;
+      cursor = wallets[wallets.length - 1].id;
+    }
   }
 
   async listByOwner(ownerUserId: string): Promise<WalletView[]> {

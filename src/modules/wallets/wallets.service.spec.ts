@@ -338,6 +338,59 @@ describe('WalletsService', () => {
     });
   });
 
+  describe('sumBalancesByOwner', () => {
+    const w = (id: string, ownerUserId: string, ledgerAccountId: string) => ({
+      ...row(id, ledgerAccountId),
+      ownerUserId,
+    });
+
+    it('pages by id cursor and sums balances per owner', async () => {
+      wallet.findMany
+        .mockResolvedValueOnce([w('w1', 'u1', 'a1'), w('w2', 'u2', 'a2')])
+        .mockResolvedValueOnce([w('w3', 'u1', 'a3')]);
+      ledger.getBalances
+        .mockResolvedValueOnce(
+          new Map([
+            ['a1', '10.50'],
+            ['a2', '2.00'],
+          ]),
+        )
+        .mockResolvedValueOnce(new Map([['a3', '0.25']]));
+
+      const totals = await service.sumBalancesByOwner('AED', 2);
+
+      expect([...totals].map(([id, m]) => [id, m.toString()])).toEqual([
+        ['u1', '10.75'],
+        ['u2', '2.00'],
+      ]);
+      expect(wallet.findMany).toHaveBeenNthCalledWith(1, {
+        where: { currency: 'AED' },
+        orderBy: { id: 'asc' },
+        take: 2,
+      });
+      expect(wallet.findMany).toHaveBeenNthCalledWith(2, {
+        where: { currency: 'AED', id: { gt: 'w2' } },
+        orderBy: { id: 'asc' },
+        take: 2,
+      });
+    });
+
+    it('returns an empty map without wallets', async () => {
+      wallet.findMany.mockResolvedValue([]);
+      await expect(service.sumBalancesByOwner('AED')).resolves.toEqual(
+        new Map(),
+      );
+    });
+
+    it('fails when a wallet has no ledger account', async () => {
+      wallet.findMany.mockResolvedValue([w('w1', 'u1', 'a1')]);
+      ledger.getBalances.mockResolvedValue(new Map());
+      await expect(service.sumBalancesByOwner('AED')).rejects.toThrow(
+        'Ledger account of wallet w1 not found',
+      );
+    });
+  });
+
   it('listByOwner orders by id', async () => {
     wallet.findMany.mockResolvedValue([]);
     await service.listByOwner('u1');
