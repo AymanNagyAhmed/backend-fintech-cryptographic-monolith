@@ -1,7 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service.js';
 import {
   auditLeafDigest,
+  consistencyProof,
   inclusionProof,
   merkleHashToHex,
   merkleRoot,
@@ -16,6 +21,16 @@ export interface InclusionProofResult {
   leafHash: string;
   path: string[];
   /** True when path recomputes to the published STH root. */
+  verified: boolean;
+}
+
+export interface ConsistencyProofResult {
+  from: number;
+  to: number;
+  fromRootHash: string;
+  toRootHash: string;
+  path: string[];
+  /** True when both sizes match published STHs and recomputed roots agree. */
   verified: boolean;
 }
 
@@ -72,6 +87,57 @@ export class ProofsService {
       rootHash: sth.rootHash,
       leafHash: merkleHashToHex(leafHash),
       path: pathBuf.map(merkleHashToHex),
+      verified,
+    };
+  }
+
+  /**
+   * Consistency proof between two published tree sizes (A-B10.4 / 2.3).
+   * `from` and `to` are tree_size values of stored STHs (`from` < `to`).
+   */
+  async consistencyProofBetween(
+    from: number,
+    to: number,
+  ): Promise<ConsistencyProofResult> {
+    if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to < 1)
+      throw new BadRequestException('from and to must be positive integers');
+    if (from > to)
+      throw new BadRequestException('from must be <= to');
+
+    const fromSth = await this.prisma.treeHead.findUnique({
+      where: { treeSize: from },
+    });
+    const toSth = await this.prisma.treeHead.findUnique({
+      where: { treeSize: to },
+    });
+    if (!fromSth || !toSth)
+      throw new NotFoundException(
+        `STH not found for treeSize from=${from} to=${to}`,
+      );
+
+    const leaves = await this.prisma.auditEvent.findMany({
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: to,
+      select: { hash: true },
+    });
+    if (leaves.length < to)
+      throw new NotFoundException(
+        `only ${leaves.length} leaves available; need treeSize=${to}`,
+      );
+
+    const digests = leaves.map((l) => auditLeafDigest(l.hash));
+    const fromRoot = merkleHashToHex(merkleRoot(digests.slice(0, from), true));
+    const toRoot = merkleHashToHex(merkleRoot(digests, true));
+    const path = consistencyProof(digests, from).map(merkleHashToHex);
+    const verified =
+      fromRoot === fromSth.rootHash && toRoot === toSth.rootHash;
+
+    return {
+      from,
+      to,
+      fromRootHash: fromSth.rootHash,
+      toRootHash: toSth.rootHash,
+      path,
       verified,
     };
   }

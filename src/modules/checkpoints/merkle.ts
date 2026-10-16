@@ -152,17 +152,18 @@ function subProof(
   n: number,
   b: boolean,
 ): MerkleHash[] {
-  if (m === n) return b ? [] : [rootOf(leaves.slice(0, n) as MerkleHash[])];
+  if (m === n) return b ? [] : [rootOf(leaves.slice(0, n))];
   const k = largestPowerOfTwoLessThan(n);
   if (m <= k) {
     const proof = subProof(leaves.slice(0, k), m, k, b);
-    proof.push(rootOf(leaves.slice(k) as MerkleHash[]));
+    proof.push(rootOf(leaves.slice(k)));
     return proof;
   }
   const proof = subProof(leaves.slice(k), m - k, n - k, false);
-  proof.push(rootOf(leaves.slice(0, k) as MerkleHash[]));
+  proof.push(rootOf(leaves.slice(0, k)));
   return proof;
 }
+
 
 /** Hex helpers used by checkpointer / API DTOs. */
 export function merkleHashToHex(h: MerkleHash): string {
