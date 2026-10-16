@@ -38,6 +38,8 @@ export interface PrismaEntity {
   dbName: string;
   file: string;
   line: number;
+  /** Field lines of a model / view: `post User @relation(...)` -> { name: 'post', type: 'User' }. */
+  fields: { name: string; type: string; line: number }[];
 }
 
 export interface Finding {
@@ -70,6 +72,7 @@ const BLOCK_START = /^\s*(model|view|enum)\s+(\w+)\s*\{/;
 const BLOCK_END = /^\s*\}/;
 const SCHEMA_ATTR = /^\s*@@schema\(\s*"(\w+)"\s*\)/;
 const MAP_ATTR = /^\s*@@map\(\s*"(\w+)"\s*\)/;
+const FIELD = /^\s*(\w+)\s+(\w+)(?:\[\]|\?)?(?:\s|$)/;
 const DATASOURCE_SCHEMAS = /schemas\s*=\s*\[([^\]]*)\]/;
 
 export function parseDatasourceSchemas(source: string): string[] {
@@ -87,6 +90,7 @@ export function parsePrismaFile(
   let open: { kind: EntityKind; name: string; line: number } | undefined;
   let schema: string | undefined;
   let dbName: string | undefined;
+  let fields: PrismaEntity['fields'] = [];
 
   source.split('\n').forEach((text, i) => {
     if (!open) {
@@ -94,14 +98,26 @@ export function parsePrismaFile(
       if (start) {
         open = { kind: start[1] as EntityKind, name: start[2], line: i + 1 };
         schema = dbName = undefined;
+        fields = [];
       }
       return;
     }
     schema ??= SCHEMA_ATTR.exec(text)?.[1];
     dbName ??= MAP_ATTR.exec(text)?.[1];
-    if (!BLOCK_END.test(text)) return;
+    if (!BLOCK_END.test(text)) {
+      const field = FIELD.exec(text.replace(/\/\/.*$/, ''));
+      if (field && !text.trim().startsWith('@@'))
+        fields.push({ name: field[1], type: field[2], line: i + 1 });
+      return;
+    }
     if (schema) {
-      entities.push({ ...open, schema, dbName: dbName ?? open.name, file });
+      entities.push({
+        ...open,
+        schema,
+        dbName: dbName ?? open.name,
+        file,
+        fields,
+      });
     } else {
       findings.push({
         file,
@@ -314,6 +330,109 @@ export function findUsages(
   return usages;
 }
 
+/**
+ * Prisma relations between models of different schemas (no cross-context relations, A-B14.2).
+ * Enums are types, not row links, so they are not checked.
+ */
+export function findCrossSchemaRelations(
+  entities: readonly PrismaEntity[],
+): Finding[] {
+  const models = new Map(
+    entities.filter((e) => e.kind !== 'enum').map((e) => [e.name, e]),
+  );
+  return entities.flatMap((e) =>
+    e.kind === 'enum'
+      ? []
+      : e.fields.flatMap((f) => {
+          const target = models.get(f.type);
+          return target && target.schema !== e.schema
+            ? [
+                {
+                  file: e.file,
+                  line: f.line,
+                  message: `${e.name}.${f.name} relates to ${target.name} in schema "${target.schema}"; ${e.name} is in "${e.schema}". Keep relations inside one schema and read other contexts through their service`,
+                },
+              ]
+            : [];
+        }),
+  );
+}
+
+/** Schemas of known tables named in one SQL text, when it contains a JOIN. */
+export function crossSchemaJoin(
+  sql: string,
+  index: SchemaIndex,
+): string[] | undefined {
+  if (!/\bJOIN\b/i.test(sql)) return undefined;
+  const schemas = new Set(
+    qualifiedNames(sql)
+      .filter((q) => index.tables.get(q.schema)?.has(q.table))
+      .map((q) => q.schema),
+  );
+  return schemas.size > 1 ? [...schemas].sort() : undefined;
+}
+
+/** SQL string / template literals in one TypeScript file that JOIN tables of different schemas. */
+export function findCrossSchemaJoins(
+  source: string,
+  fileName: string,
+  index: SchemaIndex,
+): { line: number; schemas: string[] }[] {
+  const sf = ts.createSourceFile(
+    fileName,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const out: { line: number; schemas: string[] }[] = [];
+  const visit = (node: ts.Node): void => {
+    let text: string | undefined;
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
+      text = node.text;
+    else if (ts.isTemplateExpression(node))
+      text =
+        node.head.text +
+        node.templateSpans.map((t) => ' ' + t.literal.text).join('');
+    const schemas =
+      text === undefined ? undefined : crossSchemaJoin(text, index);
+    if (schemas)
+      out.push({
+        line: sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1,
+        schemas,
+      });
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return out;
+}
+
+const SQL_OWNER =
+  /(?:ALTER\s+TABLE|CREATE\s+TABLE)(?:\s+IF\s+NOT\s+EXISTS)?(?:\s+ONLY)?\s+"?(\w+)"?\s*\.\s*"?(\w+)"?/i;
+
+/** Foreign keys in migration SQL that point at a table of another schema (A-B14.2). */
+export function findCrossSchemaForeignKeys(
+  sql: string,
+  file: string,
+): Finding[] {
+  const findings: Finding[] = [];
+  let offset = 0;
+  for (const statement of sql.split(';')) {
+    const owner = SQL_OWNER.exec(statement);
+    if (owner)
+      for (const ref of statement.matchAll(
+        /REFERENCES\s+"?(\w+)"?\s*\.\s*"?(\w+)"?/gi,
+      ))
+        if (ref[1] !== owner[1])
+          findings.push({
+            file,
+            line: sql.slice(0, offset + ref.index).split('\n').length,
+            message: `foreign key from ${owner[1]}.${owner[2]} references ${ref[1]}.${ref[2]}; no cross-schema foreign keys`,
+          });
+    offset += statement.length + 1;
+  }
+  return findings;
+}
+
 const walk = (dir: string): string[] =>
   readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
@@ -394,6 +513,23 @@ export function checkProject(
   );
   const index = buildIndex(schemas, entities, sqlFiles);
 
+  findings.push(...findCrossSchemaRelations(entities));
+  for (const [name, sql] of sqlFiles) {
+    const joined = crossSchemaJoin(sql, index);
+    if (joined)
+      findings.push({
+        file: `prisma/sql/${name}.sql`,
+        line: 0,
+        message: `JOIN across schemas ${joined.map((x) => `"${x}"`).join(', ')}; read other contexts through their service`,
+      });
+  }
+  const migrationsDir = join(root, 'prisma', 'migrations');
+  for (const f of exists(migrationsDir) ? walk(migrationsDir) : [])
+    if (f.endsWith('.sql'))
+      findings.push(
+        ...findCrossSchemaForeignKeys(readFileSync(f, 'utf8'), rel(f)),
+      );
+
   const modulesDir = join(root, 'src', 'modules');
   const files = exists(modulesDir)
     ? walk(modulesDir).filter((f) => /\.tsx?$/.test(f))
@@ -412,7 +548,14 @@ export function checkProject(
       unmapped.add(module);
       continue;
     }
-    for (const u of findUsages(readFileSync(f, 'utf8'), f, index))
+    const source = readFileSync(f, 'utf8');
+    for (const j of findCrossSchemaJoins(source, f, index))
+      findings.push({
+        file: rel(f),
+        line: j.line,
+        message: `SQL JOIN across schemas ${j.schemas.map((x) => `"${x}"`).join(', ')}; read other contexts through their service`,
+      });
+    for (const u of findUsages(source, f, index))
       if (!owned.includes(u.schema))
         findings.push({
           file: rel(f),
