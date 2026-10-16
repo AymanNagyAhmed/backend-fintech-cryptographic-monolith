@@ -10,9 +10,14 @@ import { PrismaService } from '../src/database/prisma.service.js';
 import { AuditModule } from '../src/modules/audit/audit.module.js';
 import type { OutboxEvent } from '../src/modules/outbox/interfaces/outbox-event.interface.js';
 import { OUTBOX_DEFER } from '../src/modules/outbox/interfaces/outbox-handler-result.interface.js';
+import { outboxEventName } from '../src/modules/outbox/events/outbox-event-name.js';
 import { OutboxDispatcherService } from '../src/modules/outbox/outbox-dispatcher.service.js';
 import { OutboxModule } from '../src/modules/outbox/outbox.module.js';
 import { OutboxService } from '../src/modules/outbox/outbox.service.js';
+import {
+  TRANSFER_COMPLETED_V1,
+  type TransferCompletedV1,
+} from '../src/shared-kernel/events/transfer.completed.v1.js';
 
 // Needs Compose PostgreSQL (`make up`) with claim_outbox_batch. Leaves processed outbox rows
 // and audit leaves (app_writer cannot DELETE), like the chainer e2e.
@@ -20,8 +25,14 @@ const delivered: string[] = [];
 
 @Injectable()
 class RecordingHandler {
-  @OnEvent('outbox.transfer.completed', { suppressErrors: false })
-  record(event: OutboxEvent): void {
+  @OnEvent(outboxEventName(TRANSFER_COMPLETED_V1.type), {
+    suppressErrors: false,
+  })
+  record(event: OutboxEvent<TransferCompletedV1>): void {
+    // payload is typed by the contract
+    expect(TRANSFER_COMPLETED_V1.schema.safeParse(event.payload).success).toBe(
+      true,
+    );
     delivered.push(event.id);
   }
 }
@@ -143,7 +154,7 @@ describe('OutboxDispatcherService (database)', () => {
     const failing = (event: OutboxEvent) => {
       if (event.id === ids[1]) throw new Error('handler failed');
     };
-    emitter.on('outbox.**', failing, { prepend: true });
+    emitter.on('outbox.**', failing);
     try {
       await expect(dispatcher.dispatch('wallet', 1000)).rejects.toThrow(
         'handler failed',
