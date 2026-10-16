@@ -43,6 +43,10 @@ export function verifyWebhookSignature(
 export const isWithinWebhookWindow = (timestamp: string, nowMs = Date.now()) =>
   Math.abs(Math.floor(nowMs / 1000) - Number(timestamp)) <= WEBHOOK_WINDOW_SEC;
 
+/** When the provider signed the delivery; `timestamp` must already match WEBHOOK_TIMESTAMP_PATTERN. */
+export const webhookSignedAt = (timestamp: string) =>
+  new Date(Number(timestamp) * 1000);
+
 /** Provider side (tests, scripts): the two headers of a signed webhook. */
 export function signWebhookHeaders(
   secret: string,

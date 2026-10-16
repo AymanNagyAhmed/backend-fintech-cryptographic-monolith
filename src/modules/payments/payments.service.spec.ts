@@ -6,6 +6,7 @@ import { postingExists } from '../ledger/exceptions/ledger.exceptions.js';
 import type { LedgerService } from '../ledger/ledger.service.js';
 import type { WalletView, WalletsService } from '../wallets/wallets.service.js';
 import { PaymentsService } from './payments.service.js';
+import type { WebhookEventsService } from './webhook-events.service.js';
 
 const WALLET_ID = '019a1b2c-3d4e-7f60-8a9b-0c1d2e3f4a70';
 const event = {
@@ -39,12 +40,17 @@ const runOnce = vi.fn(
 const findById = vi.fn();
 const ensureSystemAccount = vi.fn();
 const post = vi.fn();
+const find = vi.fn();
+const record = vi.fn();
 
 const service = new PaymentsService(
   { runOnce } as unknown as IdempotencyService,
   { ensureSystemAccount, post } as unknown as LedgerService,
   { findById } as unknown as WalletsService,
+  { find, record } as unknown as WebhookEventsService,
 );
+const TIMESTAMP = '1760464800';
+const receive = (body: unknown) => service.receive('stripe', body, TIMESTAMP);
 
 const failure = (fn: () => unknown) => {
   try {
@@ -63,10 +69,103 @@ describe('PaymentsService', () => {
     findById.mockResolvedValue(wallet);
     ensureSystemAccount.mockResolvedValue({ id: 'acc-clearing' });
     post.mockResolvedValue({});
+    find.mockResolvedValue(null);
+    record.mockResolvedValue(undefined);
+  });
+
+  describe('webhook_events', () => {
+    const body = { ...event, object: 'event', created: 1760464800 };
+
+    it('records the event once with its outcome, signature time and redacted payload', async () => {
+      await receive({
+        ...body,
+        data: { ...event.data, customer: { email: 'a@b.c' } },
+        livemode: false,
+      });
+      expect(find).toHaveBeenCalledWith(tx, 'stripe', event.id);
+      expect(record).toHaveBeenCalledWith(tx, {
+        provider: 'stripe',
+        eventId: event.id,
+        type: 'payment.succeeded',
+        outcome: 'credited',
+        reason: undefined,
+        requestHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+        payload: {
+          id: event.id,
+          type: 'payment.succeeded',
+          created: 1760464800,
+          data: event.data,
+        },
+        signedAt: new Date('2025-10-14T18:00:00Z'),
+      });
+    });
+
+    it('records a rejection with its reason', async () => {
+      findById.mockResolvedValue(null);
+      await receive(event);
+      expect(record).toHaveBeenCalledWith(
+        tx,
+        expect.objectContaining({
+          outcome: 'rejected',
+          reason: {
+            code: 'WALLET_NOT_FOUND',
+            message: 'No wallet with this id exists.',
+          },
+        }),
+      );
+    });
+
+    it('records an ignored event without data', async () => {
+      await receive({ id: 'evt_2', type: 'payment.refunded', data: { a: 1 } });
+      expect(record).toHaveBeenCalledWith(
+        tx,
+        expect.objectContaining({
+          outcome: 'ignored',
+          payload: { id: 'evt_2', type: 'payment.refunded' },
+        }),
+      );
+    });
+
+    it('answers from the stored row after the idempotency key was purged, without processing', async () => {
+      await receive(body);
+      const { requestHash } = record.mock.calls[0][1] as {
+        requestHash: string;
+      };
+      vi.clearAllMocks();
+      find.mockResolvedValue({
+        outcome: 'rejected',
+        reason: { code: 'ACCOUNT_FROZEN', message: 'The wallet is frozen.' },
+        requestHash,
+      });
+      const res = await receive(body);
+      expect(res.body).toEqual({
+        provider: 'stripe',
+        eventId: event.id,
+        type: 'payment.succeeded',
+        status: 'rejected',
+        deposit: { walletId: WALLET_ID, amount: '250.00', currency: 'AED' },
+        reason: { code: 'ACCOUNT_FROZEN', message: 'The wallet is frozen.' },
+      });
+      expect(findById).not.toHaveBeenCalled();
+      expect(post).not.toHaveBeenCalled();
+      expect(record).not.toHaveBeenCalled();
+    });
+
+    it('answers 422 IDEMPOTENCY_KEY_REUSED when the stored row has another body', async () => {
+      find.mockResolvedValue({
+        outcome: 'credited',
+        requestHash: 'f'.repeat(64),
+      });
+      await expect(receive(event)).rejects.toMatchObject({
+        code: 'IDEMPOTENCY_KEY_REUSED',
+        statusCode: 422,
+      });
+      expect(post).not.toHaveBeenCalled();
+    });
   });
 
   it('credits the wallet against the provider clearing account, once per event id', async () => {
-    const res = await service.receive('stripe', event);
+    const res = await receive(event);
     expect(runOnce).toHaveBeenCalledWith(
       'webhook:stripe',
       'evt_3PqR8s2eZvKYlo2C',
@@ -97,7 +196,7 @@ describe('PaymentsService', () => {
   });
 
   it('ignores other event types without touching wallets or the ledger', async () => {
-    const res = await service.receive('stripe', {
+    const res = await receive({
       id: 'evt_2',
       type: 'payment.refunded',
       data: { anything: true },
@@ -119,7 +218,7 @@ describe('PaymentsService', () => {
     ['ACCOUNT_CLOSED', { ...wallet, status: 'closed' }],
   ])('stores a rejection %s without posting', async (code, found) => {
     findById.mockResolvedValue(found);
-    const res = await service.receive('stripe', event);
+    const res = await receive(event);
     expect(res.body).toMatchObject({
       status: 'rejected',
       deposit: { walletId: WALLET_ID, amount: '250.00', currency: 'AED' },
@@ -132,7 +231,7 @@ describe('PaymentsService', () => {
     post.mockRejectedValue(
       new AccountNotActiveException('acc-wallet', 'frozen'),
     );
-    const res = await service.receive('stripe', event);
+    const res = await receive(event);
     expect(res.body).toMatchObject({
       status: 'rejected',
       reason: { code: 'ACCOUNT_FROZEN' },
@@ -147,7 +246,7 @@ describe('PaymentsService', () => {
     post.mockRejectedValue(
       new AccountNotActiveException('acc-clearing', 'frozen'),
     );
-    await expect(service.receive('stripe', event)).rejects.toMatchObject({
+    await expect(receive(event)).rejects.toMatchObject({
       code: 'DEPOSITS_UNAVAILABLE',
       statusCode: 503,
     });
@@ -157,16 +256,14 @@ describe('PaymentsService', () => {
     post.mockRejectedValue(
       postingExists('webhook:stripe:evt_3PqR8s2eZvKYlo2C'),
     );
-    const res = await service.receive('stripe', event);
+    const res = await receive(event);
     expect(res.body).toMatchObject({ status: 'credited' });
     expect(savepoints).toContain('ROLLBACK TO SAVEPOINT webhook_deposit');
   });
 
   it('lets other ledger errors roll the whole transaction back', async () => {
     post.mockRejectedValue(new Error('connection lost'));
-    await expect(service.receive('stripe', event)).rejects.toThrow(
-      'connection lost',
-    );
+    await expect(receive(event)).rejects.toThrow('connection lost');
   });
 
   it('allows the provider fields it does not read', () => {
