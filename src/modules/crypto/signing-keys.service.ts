@@ -44,6 +44,11 @@ export class SigningKeysService {
     return rows.map(toDto);
   }
 
+  async find(keyId: string): Promise<SigningKeyDto | null> {
+    const row = await this.prisma.signingKey.findUnique({ where: { keyId } });
+    return row ? toDto(row) : null;
+  }
+
   /**
    * Publishes one key version. The public key must match `alg` and `keyId` must be a
    * versioned key name (`audit-signing:v1`).

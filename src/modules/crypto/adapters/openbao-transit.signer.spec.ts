@@ -54,6 +54,35 @@ describe('OpenBaoTransitSigner', () => {
     });
   });
 
+  it('rotates Transit and lists public versions oldest first', async () => {
+    fetchFn
+      .mockResolvedValueOnce(keyInfo())
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(
+        keyInfo('ed25519', {
+          1: {
+            public_key: rawPublicKey,
+            creation_time: '2026-10-16T10:00:00Z',
+          },
+          2: {
+            public_key: rawPublicKey,
+            creation_time: '2026-10-16T11:00:00Z',
+          },
+        }),
+      );
+    const s = signer();
+    await s.rotate('audit-signing');
+    expect(fetchFn.mock.calls[1][0]).toBe(
+      'http://bao:8200/v1/transit/keys/audit-signing/rotate',
+    );
+    const listed = await s.publicVersions('audit-signing');
+    expect(listed.alg).toBe('ed25519');
+    expect(listed.versions.map((v) => v.version)).toEqual([1, 2]);
+    expect(listed.versions[0].activatedAt?.toISOString()).toBe(
+      '2026-10-16T10:00:00.000Z',
+    );
+  });
+
   it('reports ecdsa-p256 for an ecdsa-p256 key', async () => {
     fetchFn
       .mockResolvedValueOnce(keyInfo('ecdsa-p256'))

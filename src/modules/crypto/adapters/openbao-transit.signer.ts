@@ -15,9 +15,22 @@ const ALG_OF_KEY_TYPE: Readonly<Record<string, SigningAlg>> = {
 /** `vault:v<version>:<base64>`, the Transit signature format. */
 const TRANSIT_SIGNATURE = /^vault:v([1-9]\d{0,8}):([A-Za-z0-9+/]+={0,2})$/;
 
+interface TransitKeyVersion {
+  public_key?: string;
+  creation_time?: string;
+}
+
 interface TransitKey {
   type: string;
-  keys: Record<string, { public_key?: string }>;
+  latest_version?: number;
+  keys: Record<string, TransitKeyVersion>;
+}
+
+/** One published version of a Transit signing key (public half only). */
+export interface TransitPublicVersion {
+  version: number;
+  publicKey: KeyObject;
+  activatedAt?: Date;
 }
 
 /**
@@ -60,6 +73,53 @@ export class OpenBaoTransitSigner extends KeyStoreSigner {
     };
   }
 
+  /** Advances Transit to the next key version (A-B8.5). Private key never leaves OpenBao. */
+  async rotate(keyRef: string): Promise<void> {
+    const key = await this.readKey(keyRef);
+    if (!key) throw new KeyStoreException(`Transit key ${keyRef} not found`);
+    algOf(keyRef, key); // refuse non-signing types before rotating
+    await this.request(
+      'POST',
+      `transit/keys/${encodeURIComponent(keyRef)}/rotate`,
+      undefined,
+      { emptyOk: true },
+    );
+  }
+
+  /**
+   * Public keys of every Transit version, oldest first. Used to publish
+   * `crypto.signing_keys` after a rotation.
+   */
+  async publicVersions(
+    keyRef: string,
+  ): Promise<{ alg: SigningAlg; versions: TransitPublicVersion[] }> {
+    const key = await this.readKey(keyRef);
+    if (!key) throw new KeyStoreException(`Transit key ${keyRef} not found`);
+    const alg = algOf(keyRef, key);
+    const versions = Object.keys(key.keys)
+      .map(Number)
+      .filter((n) => Number.isSafeInteger(n) && n >= 1)
+      .sort((a, b) => a - b)
+      .map((version) => {
+        const entry = key.keys[String(version)];
+        const activatedAt = entry?.creation_time
+          ? new Date(entry.creation_time)
+          : undefined;
+        return {
+          version,
+          publicKey: this.parsePublicKey(
+            keyRef,
+            version,
+            alg,
+            entry?.public_key,
+          ),
+          ...(activatedAt &&
+            !Number.isNaN(activatedAt.getTime()) && { activatedAt }),
+        };
+      });
+    return { alg, versions };
+  }
+
   protected async loadPublicKey(
     keyRef: string,
     version: number,
@@ -67,7 +127,19 @@ export class OpenBaoTransitSigner extends KeyStoreSigner {
     const key = await this.readKey(keyRef);
     const encoded = key?.keys[String(version)]?.public_key;
     if (!key || !encoded) return null;
-    const alg = algOf(keyRef, key);
+    return this.parsePublicKey(keyRef, version, algOf(keyRef, key), encoded);
+  }
+
+  private parsePublicKey(
+    keyRef: string,
+    version: number,
+    alg: SigningAlg,
+    encoded: string | undefined,
+  ): KeyObject {
+    if (!encoded)
+      throw new KeyStoreException(
+        `Transit key ${keyRef} v${version} has no public key`,
+      );
     try {
       // Ed25519 public keys come as 32 raw bytes, ECDSA ones as PEM
       return alg === 'ed25519'
@@ -95,11 +167,12 @@ export class OpenBaoTransitSigner extends KeyStoreSigner {
     );
   }
 
-  /** `data` of the response; null for 404 (no such key). */
+  /** `data` of the response; null for 404 (no such key) or an empty success when `emptyOk`. */
   private async request<T>(
     method: 'GET' | 'POST',
     path: string,
     body?: unknown,
+    opts?: { emptyOk?: boolean },
   ): Promise<T | null> {
     let res: Response;
     try {
@@ -118,10 +191,12 @@ export class OpenBaoTransitSigner extends KeyStoreSigner {
       });
     }
     if (res.status === 404) return null;
+    if (res.status === 204 && opts?.emptyOk) return null;
     const json = (await res.json().catch(() => null)) as {
       data?: T;
       errors?: unknown[];
     } | null;
+    if (opts?.emptyOk && res.ok && !json?.data) return null;
     if (!res.ok || !json?.data) {
       const reason = Array.isArray(json?.errors)
         ? `: ${String(json.errors[0]).slice(0, 200)}`
