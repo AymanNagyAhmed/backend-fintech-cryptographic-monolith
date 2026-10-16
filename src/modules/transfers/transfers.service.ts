@@ -17,6 +17,7 @@ import { getRequestId } from '../../common/request-context.js';
 import { AccountNotActiveException } from '../ledger/exceptions/account-not-active.exception.js';
 import { LedgerService } from '../ledger/ledger.service.js';
 import { OutboxService } from '../outbox/outbox.service.js';
+import { auditPartitionKey } from '../../shared-kernel/audit/audit-partition-key.js';
 import type { WalletView } from '../wallets/wallets.service.js';
 import { WalletsService } from '../wallets/wallets.service.js';
 import type { CreateTransferDto } from './dto/create-transfer.dto.js';
@@ -51,6 +52,7 @@ const assertActive = (
 @Injectable()
 export class TransfersService {
   private readonly dailyLimits: Record<Currency, Money>;
+  private readonly partitionCount: number;
 
   constructor(
     private readonly idempotency: IdempotencyService,
@@ -68,6 +70,7 @@ export class TransfersService {
         ),
       ]),
     ) as Record<Currency, Money>;
+    this.partitionCount = config.get('AUDIT_PARTITION_COUNT', { infer: true });
   }
 
   /**
@@ -159,6 +162,7 @@ export class TransfersService {
       occurredAt: dtoOut.createdAt,
       actor: { subjectRef: userId },
       ...(requestId !== undefined ? { requestId } : {}),
+      partitionKey: auditPartitionKey(row.id, this.partitionCount),
       transferId: row.id,
       sourceWalletId: from.id,
       destinationWalletId: to.id,

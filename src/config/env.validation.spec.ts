@@ -166,6 +166,17 @@ describe('env validation', () => {
     );
   });
 
+  it('defaults AUDIT_PARTITION_COUNT to 16 and accepts 1|4|16', () => {
+    expect(validate(validEnv()).AUDIT_PARTITION_COUNT).toBe(16);
+    expect(
+      validate({ ...validEnv(), AUDIT_PARTITION_COUNT: '4' })
+        .AUDIT_PARTITION_COUNT,
+    ).toBe(4);
+    expect(
+      messageOf({ ...validEnv(), AUDIT_PARTITION_COUNT: '0' }),
+    ).toContain('- AUDIT_PARTITION_COUNT:');
+  });
+
   it('defaults the daily transfer limits and accepts amounts at the currency scale', () => {
     const env = validate(validEnv());
     expect([
