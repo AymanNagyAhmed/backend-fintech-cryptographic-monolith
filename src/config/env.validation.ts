@@ -129,6 +129,68 @@ export class EnvironmentVariables {
   @Max(720)
   BENEFICIARY_ACTIVATION_DELAY_HOURS: number = 24;
 
+  // Withdrawal policy (A-B13.2): daily cap, four-eyes threshold, large-amount delay
+  @IsOptional()
+  @Matches(LIMIT_FIAT, { message: LIMIT_FIAT_MESSAGE })
+  WITHDRAWAL_DAILY_LIMIT_AED: string = '20000.00';
+
+  @IsOptional()
+  @Matches(LIMIT_FIAT, { message: LIMIT_FIAT_MESSAGE })
+  WITHDRAWAL_DAILY_LIMIT_USD: string = '5000.00';
+
+  @IsOptional()
+  @Matches(LIMIT_FIAT, { message: LIMIT_FIAT_MESSAGE })
+  WITHDRAWAL_DAILY_LIMIT_EUR: string = '5000.00';
+
+  @IsOptional()
+  @Matches(LIMIT_BTC, {
+    message: '$property must be a positive amount with up to 8 decimals',
+  })
+  WITHDRAWAL_DAILY_LIMIT_BTC: string = '0.25000000';
+
+  @IsOptional()
+  @Matches(LIMIT_FIAT, { message: LIMIT_FIAT_MESSAGE })
+  WITHDRAWAL_APPROVAL_THRESHOLD_AED: string = '5000.00';
+
+  @IsOptional()
+  @Matches(LIMIT_FIAT, { message: LIMIT_FIAT_MESSAGE })
+  WITHDRAWAL_APPROVAL_THRESHOLD_USD: string = '1500.00';
+
+  @IsOptional()
+  @Matches(LIMIT_FIAT, { message: LIMIT_FIAT_MESSAGE })
+  WITHDRAWAL_APPROVAL_THRESHOLD_EUR: string = '1500.00';
+
+  @IsOptional()
+  @Matches(LIMIT_BTC, {
+    message: '$property must be a positive amount with up to 8 decimals',
+  })
+  WITHDRAWAL_APPROVAL_THRESHOLD_BTC: string = '0.05000000';
+
+  @IsOptional()
+  @Matches(LIMIT_FIAT, { message: LIMIT_FIAT_MESSAGE })
+  WITHDRAWAL_LARGE_DELAY_THRESHOLD_AED: string = '1000.00';
+
+  @IsOptional()
+  @Matches(LIMIT_FIAT, { message: LIMIT_FIAT_MESSAGE })
+  WITHDRAWAL_LARGE_DELAY_THRESHOLD_USD: string = '300.00';
+
+  @IsOptional()
+  @Matches(LIMIT_FIAT, { message: LIMIT_FIAT_MESSAGE })
+  WITHDRAWAL_LARGE_DELAY_THRESHOLD_EUR: string = '300.00';
+
+  @IsOptional()
+  @Matches(LIMIT_BTC, {
+    message: '$property must be a positive amount with up to 8 decimals',
+  })
+  WITHDRAWAL_LARGE_DELAY_THRESHOLD_BTC: string = '0.01000000';
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(168)
+  WITHDRAWAL_LARGE_DELAY_HOURS: number = 24;
+
   // Cron pattern (5 or 6 fields, UTC) of the nightly ledger reconciliation job
   @IsOptional()
   @Matches(CRON, { message: '$property must be a cron pattern like 0 1 * * *' })
