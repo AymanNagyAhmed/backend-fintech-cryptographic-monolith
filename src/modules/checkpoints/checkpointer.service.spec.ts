@@ -4,6 +4,7 @@ import type { SignerService } from '../crypto/signer.service.js';
 import { CheckpointerService } from './checkpointer.service.js';
 import { auditLeafDigest, merkleHashToHex, merkleRoot } from './merkle.js';
 import type { TsaService } from './tsa.service.js';
+import type { WormService } from './worm.service.js';
 
 describe('CheckpointerService', () => {
   const config = {
@@ -12,6 +13,9 @@ describe('CheckpointerService', () => {
   const tsa = {
     stampTreeHead: vi.fn().mockResolvedValue(undefined),
   } as unknown as TsaService;
+  const worm = {
+    putBatch: vi.fn().mockResolvedValue({ key: 'k', skipped: false }),
+  } as unknown as WormService;
 
   it('returns empty when there are no audit events', async () => {
     const prisma = {
@@ -23,6 +27,7 @@ describe('CheckpointerService', () => {
       prisma as never,
       signer,
       tsa,
+      worm,
       config,
     );
     await expect(service.build()).resolves.toEqual({
@@ -56,6 +61,7 @@ describe('CheckpointerService', () => {
       prisma as never,
       signer,
       tsa,
+      worm,
       config,
     );
     const result = await service.build();
@@ -94,6 +100,7 @@ describe('CheckpointerService', () => {
       prisma as never,
       signer,
       tsa,
+      worm,
       config,
     );
     const result = await service.build();
@@ -108,6 +115,7 @@ describe('CheckpointerService', () => {
       'sth-new',
       expect.objectContaining({ treeSize: 2, rootHash: expectedRoot }),
     );
+    expect(worm.putBatch).toHaveBeenCalledWith(2);
     expect(prisma.treeHead.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         treeSize: 2,

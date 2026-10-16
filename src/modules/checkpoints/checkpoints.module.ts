@@ -7,11 +7,24 @@ import { CheckpointerService } from './checkpointer.service.js';
 import { ProofsService } from './proofs.service.js';
 import { SthService } from './sth.service.js';
 import { TsaService } from './tsa.service.js';
+import { WormService } from './worm.service.js';
 
 @Module({
   imports: [DatabaseModule, CryptoModule, AuditModule],
   controllers: [CheckpointsController],
-  providers: [CheckpointerService, ProofsService, SthService, TsaService],
-  exports: [CheckpointerService, ProofsService, SthService, TsaService],
+  providers: [
+    CheckpointerService,
+    ProofsService,
+    SthService,
+    TsaService,
+    WormService,
+  ],
+  exports: [
+    CheckpointerService,
+    ProofsService,
+    SthService,
+    TsaService,
+    WormService,
+  ],
 })
 export class CheckpointsModule {}
