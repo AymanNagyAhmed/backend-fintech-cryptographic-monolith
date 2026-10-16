@@ -35,7 +35,8 @@
     "postman:check": "tsx scripts/postman/check-coverage.ts",
     "postman:env": "tsx scripts/postman/build-env.ts",
     "postman:test": "newman run postman/fintech-monolith.postman_collection.json -e postman/environments/dev.local.postman_environment.json --env-var freshUser=true --bail",
-    "cbom:check": "tsx scripts/cbom-check.ts"
+    "cbom:check": "tsx scripts/cbom-check.ts",
+    "openbao:setup-audit-signer": "tsx scripts/setup-audit-signer.ts"
   },
   "dependencies": {
     "@aws-sdk/client-kms": "3.1152.0",
