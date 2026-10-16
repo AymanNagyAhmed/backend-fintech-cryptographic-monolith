@@ -2004,6 +2004,72 @@
       "name": "Webhooks"
     },
     {
+      "event": [],
+      "id": "2c5c67fc-879a-5591-a7fc-8f72a12c8310",
+      "item": [
+        {
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('operationId', 'audit.listKeys');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "d9315233-c499-5052-a5e4-599191f0baa5",
+          "name": "List published signing public keys (including revoked ones)",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {},
+            "description": "List published signing public keys (including revoked ones)",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "name": "List published signing public keys (including revoked ones)",
+            "url": {
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "audit",
+                "keys"
+              ],
+              "raw": "{{baseUrl}}/audit/keys"
+            }
+          },
+          "response": [
+            {
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"OK\",\n  \"meta\": {\n    \"requestId\": \"req_6ce0eecd9fd7a31fdae9f47b\"\n  },\n  \"data\": {\n    \"items\": [\n      {\n        \"keyId\": \"audit-signing:v1\",\n        \"version\": 1,\n        \"alg\": \"ed25519\",\n        \"publicKey\": \"MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE=\",\n        \"activatedAt\": \"2026-10-16T17:00:00.000Z\",\n        \"revokedAt\": null\n      },\n      {\n        \"keyId\": \"audit-signing:v1\",\n        \"version\": 1,\n        \"alg\": \"ed25519\",\n        \"publicKey\": \"MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE=\",\n        \"activatedAt\": \"2026-10-16T17:00:00.000Z\",\n        \"revokedAt\": null\n      }\n    ]\n  }\n}",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "37f03b74-ae84-539e-a60c-5ec6a4ae1ac6",
+              "name": "200",
+              "status": "OK"
+            }
+          ]
+        }
+      ],
+      "name": "Audit"
+    },
+    {
       "event": [
         {
           "listen": "prerequest",

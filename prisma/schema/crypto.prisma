@@ -1,0 +1,16 @@
+// Public half of each signing key version (2.6, 2.7). Private keys stay in OpenBao / KMS.
+// keyId is `<keyRef>:v<version>` (same string every signature stores). A row is fixed after
+// insert; the only change allowed is setting revokedAt once (trigger). published at
+// GET /v1/audit/keys so offline verifiers can fetch them.
+model SigningKey {
+  keyId       String    @id @map("key_id") @db.VarChar(96)
+  version     Int
+  alg         String    @db.VarChar(32)
+  publicKey   String    @map("public_key") @db.Text
+  activatedAt DateTime  @map("activated_at") @db.Timestamptz(6)
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  @@index([activatedAt])
+  @@map("signing_keys")
+  @@schema("crypto")
+}
