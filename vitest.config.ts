@@ -12,9 +12,9 @@ export default defineConfig({
     setupFiles: ['reflect-metadata'],
     coverage: {
       provider: 'v8',
-      // A-B15.5: 80% on money, crypto and audit logic. Wiring (modules,
-      // controllers, DTOs, queue processors/schedulers, CLI entry points) is
-      // exercised by the e2e suite, not by unit coverage.
+      // A-B15.5 Done-when: ≥80% statements/branches/functions/lines on money,
+      // crypto and audit logic. Wiring (modules, controllers, DTOs, queue
+      // processors/schedulers, CLI entry points) is exercised by e2e, not unit coverage.
       include: [
         'src/common/money/**/*.ts',
         'src/common/crypto/**/*.ts',
@@ -38,7 +38,7 @@ export default defineConfig({
       reporter: ['text-summary', 'text'],
       thresholds: {
         statements: 80,
-        branches: 70,
+        branches: 80,
         functions: 80,
         lines: 80,
       },
