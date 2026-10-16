@@ -48,6 +48,6 @@ import { TotpService } from './totp/totp.service.js';
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: SignedRequestGuard },
   ],
-  exports: [ApiClientsService],
+  exports: [ApiClientsService, TotpService],
 })
 export class AuthModule {}

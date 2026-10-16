@@ -17,9 +17,9 @@ export const OWNERSHIP: Readonly<Record<string, readonly string[]>> = {
   crypto: ['crypto'],
   // Outbox module writes every context outbox; business modules call OutboxService
   // instead of touching another context's table (A-B9.3).
-  outbox: ['auth', 'wallet', 'ledger', 'payments'],
+  outbox: ['auth', 'wallet', 'ledger', 'payments', 'withdrawals'],
   // Chainer reads context outboxes (via audit.claim_outbox_row) and writes audit_events.
-  audit: ['audit', 'auth', 'wallet', 'ledger', 'payments'],
+  audit: ['audit', 'auth', 'wallet', 'ledger', 'payments', 'withdrawals'],
   checkpoints: ['audit'],
   // PII scanner reads audit payloads (A-B11.5)
   privacy: ['privacy', 'audit'],

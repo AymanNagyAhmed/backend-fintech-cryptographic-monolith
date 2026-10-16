@@ -4,6 +4,7 @@ export const OUTBOX_CONTEXTS = [
   'wallet',
   'ledger',
   'payments',
+  'withdrawals',
 ] as const;
 
 export type OutboxContext = (typeof OUTBOX_CONTEXTS)[number];

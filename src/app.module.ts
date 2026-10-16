@@ -34,6 +34,7 @@ import { CheckpointJobsModule } from './modules/checkpoints/jobs/checkpoint-jobs
 import { PrivacyModule } from './modules/privacy/privacy.module.js';
 import { PrivacyJobsModule } from './modules/privacy/jobs/privacy-jobs.module.js';
 import { ComplianceModule } from './modules/compliance/compliance.module.js';
+import { WithdrawalsModule } from './modules/withdrawals/withdrawals.module.js';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { ComplianceModule } from './modules/compliance/compliance.module.js';
     PrivacyModule,
     PrivacyJobsModule,
     ComplianceModule,
+    WithdrawalsModule,
     IdempotencyJobsModule,
   ],
   controllers: [AppController],
