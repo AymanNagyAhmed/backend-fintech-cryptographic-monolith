@@ -3,11 +3,15 @@ import type { EnvironmentVariables } from '../../config/env.validation.js';
 import type { SignerService } from '../crypto/signer.service.js';
 import { CheckpointerService } from './checkpointer.service.js';
 import { auditLeafDigest, merkleHashToHex, merkleRoot } from './merkle.js';
+import type { TsaService } from './tsa.service.js';
 
 describe('CheckpointerService', () => {
   const config = {
     get: () => 'audit-signing',
   } as unknown as ConfigService<EnvironmentVariables, true>;
+  const tsa = {
+    stampTreeHead: vi.fn().mockResolvedValue(undefined),
+  } as unknown as TsaService;
 
   it('returns empty when there are no audit events', async () => {
     const prisma = {
@@ -15,7 +19,12 @@ describe('CheckpointerService', () => {
       treeHead: { findFirst: vi.fn() },
     };
     const signer = { sign: vi.fn() } as unknown as SignerService;
-    const service = new CheckpointerService(prisma as never, signer, config);
+    const service = new CheckpointerService(
+      prisma as never,
+      signer,
+      tsa,
+      config,
+    );
     await expect(service.build()).resolves.toEqual({
       treeSize: 0,
       rootHash: '',
@@ -43,7 +52,12 @@ describe('CheckpointerService', () => {
       },
     };
     const signer = { sign: vi.fn() } as unknown as SignerService;
-    const service = new CheckpointerService(prisma as never, signer, config);
+    const service = new CheckpointerService(
+      prisma as never,
+      signer,
+      tsa,
+      config,
+    );
     const result = await service.build();
     expect(result.skipped).toBe(true);
     expect(result.sthId).toBe('sth1');
@@ -76,7 +90,12 @@ describe('CheckpointerService', () => {
         sig: 'dGVzdA==',
       }),
     } as unknown as SignerService;
-    const service = new CheckpointerService(prisma as never, signer, config);
+    const service = new CheckpointerService(
+      prisma as never,
+      signer,
+      tsa,
+      config,
+    );
     const result = await service.build();
     expect(result).toMatchObject({
       treeSize: 2,
@@ -85,6 +104,10 @@ describe('CheckpointerService', () => {
       empty: false,
     });
     expect(signer.sign).toHaveBeenCalledOnce();
+    expect(tsa.stampTreeHead).toHaveBeenCalledWith(
+      'sth-new',
+      expect.objectContaining({ treeSize: 2, rootHash: expectedRoot }),
+    );
     expect(prisma.treeHead.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         treeSize: 2,
