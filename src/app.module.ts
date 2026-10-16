@@ -32,6 +32,7 @@ import { AuditJobsModule } from './modules/audit/jobs/audit-jobs.module.js';
 import { CheckpointsModule } from './modules/checkpoints/checkpoints.module.js';
 import { CheckpointJobsModule } from './modules/checkpoints/jobs/checkpoint-jobs.module.js';
 import { PrivacyModule } from './modules/privacy/privacy.module.js';
+import { PrivacyJobsModule } from './modules/privacy/jobs/privacy-jobs.module.js';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { PrivacyModule } from './modules/privacy/privacy.module.js';
     CheckpointsModule,
     CheckpointJobsModule,
     PrivacyModule,
+    PrivacyJobsModule,
     IdempotencyJobsModule,
   ],
   controllers: [AppController],
