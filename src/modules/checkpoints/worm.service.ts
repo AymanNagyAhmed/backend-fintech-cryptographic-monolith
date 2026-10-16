@@ -74,7 +74,11 @@ export class WormService {
         sth.tsaToken != null && sth.tsaToken.length > 0
           ? Buffer.from(sth.tsaToken).toString('base64')
           : null,
-      leaves,
+      leaves: leaves.map((l) => ({
+        ...l,
+        seq: l.seq.toString(),
+        occurredAt: l.occurredAt.toISOString(),
+      })),
     });
 
     const key = `checkpoints/treeSize=${treeSize}/batch.json`;
