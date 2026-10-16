@@ -267,6 +267,13 @@ export class EnvironmentVariables {
   })
   SIGNING_KEY_NAME: string;
 
+  // Non-exportable custody key (OpenBao Transit / KMS); MPC is the production target
+  @IsOptional()
+  @Matches(/^[a-z0-9][a-z0-9_-]{0,63}$/, {
+    message: '$property must be 1-64 characters of a-z 0-9 _ -',
+  })
+  CUSTODY_SIGNING_KEY_NAME: string = 'custody-signing';
+
   @IsIn(SIGNING_ALGS)
   SIGNING_ALG: (typeof SIGNING_ALGS)[number];
 
