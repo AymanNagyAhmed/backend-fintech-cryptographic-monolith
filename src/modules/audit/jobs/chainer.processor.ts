@@ -1,7 +1,10 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import type { Job } from 'bullmq';
 import { OutboxLagService } from '../../outbox/outbox-lag.service.js';
-import { ChainerService, type ChainerRunResult } from '../chainer.service.js';
+import {
+  ChainerService,
+  type ChainerRunResult,
+} from '../chainer.service.js';
 import { CHAINER_QUEUE } from './chainer.constants.js';
 
 @Processor(CHAINER_QUEUE, { concurrency: 1 })

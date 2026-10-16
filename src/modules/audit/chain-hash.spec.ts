@@ -12,14 +12,7 @@ describe('chainHash', () => {
   it('hashes prev_hash bytes then canonical JSON (order-stable)', () => {
     const expected = createHash('sha256')
       .update(Buffer.from(GENESIS_PREV_HASH, 'hex'))
-      .update(
-        canonicalJson({
-          amount: '1.00',
-          schemaVersion: 1,
-          type: 'transfer.completed',
-        }),
-        'utf8',
-      )
+      .update(canonicalJson({ amount: '1.00', schemaVersion: 1, type: 'transfer.completed' }), 'utf8')
       .digest('hex');
     expect(chainHash(GENESIS_PREV_HASH, payload)).toBe(expected);
     expect(

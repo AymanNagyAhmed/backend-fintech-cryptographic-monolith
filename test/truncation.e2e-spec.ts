@@ -4,10 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { validate } from '../src/config/env.validation.js';
 import { DatabaseModule } from '../src/database/database.module.js';
 import { PrismaService } from '../src/database/prisma.service.js';
-import {
-  GENESIS_PREV_HASH,
-  chainHash,
-} from '../src/modules/audit/chain-hash.js';
+import { GENESIS_PREV_HASH, chainHash } from '../src/modules/audit/chain-hash.js';
 import { WitnessService } from '../src/modules/checkpoints/witness.service.js';
 
 // Done-when A-B10: deleting the last N leaves is detected via treeSize (2.3).
