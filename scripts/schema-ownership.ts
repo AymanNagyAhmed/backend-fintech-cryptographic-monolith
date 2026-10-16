@@ -15,10 +15,11 @@ export const OWNERSHIP: Readonly<Record<string, readonly string[]>> = {
   payments: ['payments'],
   withdrawals: ['withdrawals'],
   crypto: ['crypto'],
-  // Outbox module claims/writes every context outbox; business modules call OutboxService
+  // Outbox module writes every context outbox; business modules call OutboxService
   // instead of touching another context's table (A-B9.3).
   outbox: ['auth', 'wallet', 'ledger', 'payments'],
-  audit: ['audit'],
+  // Chainer reads context outboxes (via audit.claim_outbox_row) and writes audit_events.
+  audit: ['audit', 'auth', 'wallet', 'ledger', 'payments'],
   checkpoints: ['audit'],
   privacy: ['privacy'],
   compliance: ['compliance'],

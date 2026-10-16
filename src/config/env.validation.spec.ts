@@ -154,6 +154,18 @@ describe('env validation', () => {
     ).toContain('- IDEMPOTENCY_PURGE_CRON:');
   });
 
+  it('defaults CHAINER_CRON and CHAINER_BATCH_SIZE', () => {
+    const env = validate(validEnv());
+    expect(env.CHAINER_CRON).toBe('*/5 * * * * *');
+    expect(env.CHAINER_BATCH_SIZE).toBe(50);
+    expect(
+      validate({ ...validEnv(), CHAINER_BATCH_SIZE: '10' }).CHAINER_BATCH_SIZE,
+    ).toBe(10);
+    expect(messageOf({ ...validEnv(), CHAINER_CRON: 'often' })).toContain(
+      '- CHAINER_CRON:',
+    );
+  });
+
   it('defaults the daily transfer limits and accepts amounts at the currency scale', () => {
     const env = validate(validEnv());
     expect([
