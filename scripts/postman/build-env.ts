@@ -15,7 +15,9 @@ const { values: args } = parseArgs({
 /** Postman secret variable -> .env key. Add a line when a request needs a new secret. */
 const SECRETS_FROM_ENV: Record<string, string> = {
   b2bSecret: 'B2B_DEV_SECRET',
+  webhookSecret: 'WEBHOOK_SECRET_STRIPE',
   webhookSecretStripe: 'WEBHOOK_SECRET_STRIPE',
+  approverPassword: 'SEED_USER_PASSWORD',
 };
 
 /** Postman variable -> .env key that replaces the committed value only when it is set. */

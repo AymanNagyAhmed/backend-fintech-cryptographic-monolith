@@ -6,9 +6,12 @@ const SECRETS = { stripe: 'webhookSecretStripe' };
 
 const providerVar = pm.request.url.variables.get('provider');
 const provider = pm.variables.replaceIn(providerVar || 'stripe');
-const secret = pm.environment.get(SECRETS[provider]);
+const secret =
+  pm.environment.get(SECRETS[provider]) || pm.environment.get('webhookSecret');
 if (!secret)
-  throw new Error(`${SECRETS[provider] || 'webhook secret'} is empty: run npm run postman:env`);
+  throw new Error(
+    `${SECRETS[provider] || 'webhookSecret'} is empty: run npm run postman:env`,
+  );
 
 if (pm.environment.get('keepWebhookEventId') !== 'true' || !pm.environment.get('webhookEventId'))
   pm.environment.set('webhookEventId', `evt_${pm.variables.replaceIn('{{$guid}}').replace(/-/g, '')}`);

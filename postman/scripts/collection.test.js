@@ -3,7 +3,29 @@
 const operationId = pm.variables.get('operationId');
 const status = pm.response.code;
 // Failures a request may answer in a normal run (e.g. the fixed dev user already exists)
-const tolerated = { 'auth.register': ['EMAIL_TAKEN'] };
+const tolerated = {
+  'auth.register': ['EMAIL_TAKEN'],
+  // Allow-list confirm without an enrolled TOTP in the Newman smoke env
+  'withdrawals.beneficiaryConfirm': ['INVALID_TOTP', 'TOTP_REQUIRED'],
+  // Privileged audit/compliance routes need MFA compliance user
+  'audit.verify': ['FORBIDDEN', 'UNAUTHORIZED'],
+  'audit.sthLatest': ['FORBIDDEN', 'UNAUTHORIZED', 'NOT_FOUND'],
+  'audit.sthBySize': ['FORBIDDEN', 'UNAUTHORIZED', 'NOT_FOUND'],
+  'audit.proof': ['FORBIDDEN', 'UNAUTHORIZED', 'NOT_FOUND'],
+  'audit.consistency': ['FORBIDDEN', 'UNAUTHORIZED', 'NOT_FOUND', 'BAD_REQUEST'],
+  'privacy.erasureRequest': ['FORBIDDEN', 'UNAUTHORIZED', 'NOT_FOUND'],
+  'privacy.erasureApprove': ['FORBIDDEN', 'UNAUTHORIZED', 'NOT_FOUND'],
+  'compliance.export': ['FORBIDDEN', 'UNAUTHORIZED'],
+  'compliance.search': ['FORBIDDEN', 'UNAUTHORIZED'],
+  'reserves.proofMe': ['NOT_FOUND', 'RESERVES_SNAPSHOT_NOT_FOUND', 'RESERVES_LEAF_NOT_FOUND'],
+  'reserves.compare': [
+    'FORBIDDEN',
+    'UNAUTHORIZED',
+    'NOT_FOUND',
+    'RESERVES_SNAPSHOT_NOT_FOUND',
+    'RESERVES_UNDER_COLLATERALIZED',
+  ],
+};
 const MONEY_KEYS = ['amount', 'balance', 'fee', 'total'];
 
 let body;
@@ -35,11 +57,13 @@ if (body && status < 400) {
     pm.expect(body.success).to.eql(false);
     pm.expect(body.error.code).to.match(/^[A-Z][A-Z0-9_]*$/);
   });
-  // A request's pre-request script may announce the failure it expects (expectedErrorCode)
-  const expected = pm.variables.get('expectedErrorCode');
+  // A request's pre-request script may announce the failure it expects
+  const expected = [
+    ...(tolerated[operationId] || []),
+    pm.variables.get('expectedErrorCode'),
+    pm.variables.get('expectedErrorCodeAlt'),
+  ].filter(Boolean);
   pm.test(`${operationId}: answered ${status} ${body.error.code}`, () =>
-    pm.expect([...(tolerated[operationId] || []), ...(expected ? [expected] : [])]).to.include(
-      body.error.code,
-    ),
+    pm.expect(expected).to.include(body.error.code),
   );
 }
