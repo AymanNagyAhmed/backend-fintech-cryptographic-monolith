@@ -10,6 +10,9 @@ export default defineConfig({
     root: './',
     include: ['**/*.spec.ts'],
     setupFiles: ['reflect-metadata'],
+    env: {
+      OTEL_SDK_DISABLED: 'true',
+    },
     coverage: {
       provider: 'v8',
       // A-B15.5 Done-when: ≥80% statements/branches/functions/lines on money,

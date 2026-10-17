@@ -1,15 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClockQualityService } from '../../common/clock/clock-quality.service.js';
-import type { EnvironmentVariables } from '../../config/env.validation.js';
-import { PrismaService } from '../../database/prisma.service.js';
-import { Prisma } from '../../generated/prisma/client.js';
-import { SignerService } from '../crypto/signer.service.js';
 import {
   auditLeafDigest,
   merkleHashToHex,
   merkleRoot,
 } from '../../common/crypto/merkle.js';
+import { MetricsService } from '../../common/metrics/metrics.service.js';
+import type { EnvironmentVariables } from '../../config/env.validation.js';
+import { PrismaService } from '../../database/prisma.service.js';
+import { Prisma } from '../../generated/prisma/client.js';
+import { SignerService } from '../crypto/signer.service.js';
 import {
   sthCanonicalBytes,
   sthContentHash,
@@ -44,6 +45,7 @@ export class CheckpointerService {
     private readonly tsa: TsaService,
     private readonly worm: WormService,
     private readonly clock: ClockQualityService,
+    private readonly metrics: MetricsService,
     config: ConfigService<EnvironmentVariables, true>,
   ) {
     this.keyRef = config.get('SIGNING_KEY_NAME', { infer: true });
@@ -122,6 +124,7 @@ export class CheckpointerService {
         await this.tsa.stampTreeHead(row.id, payload);
       } catch (err) {
         // STH is already durable; TSA can be retried later without blocking the chain
+        this.metrics.recordTsaFailure();
         this.logger.warn({ err, sthId: row.id }, 'TSA stamp failed; will retry');
       }
       try {
