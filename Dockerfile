@@ -23,7 +23,9 @@ RUN npx prisma generate --sql && npm run build \
   && test -f dist/main.js \
   && test -d dist/generated/prisma
 
-# --- migrate: keeps prisma CLI; runs migrate deploy (one-shot Compose service) ---
+# --- migrate: keeps prisma CLI; one-shot Compose service (A-B16.3) ---
+# Build: docker build --target migrate -t fintech-backend-migrate:local -f Dockerfile .
+# Run with MIGRATOR_DATABASE_URL pointing at the migrator role (see docker-compose.prod.yml).
 FROM deps AS migrate
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/prisma.config.ts ./
