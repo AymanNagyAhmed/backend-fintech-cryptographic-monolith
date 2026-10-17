@@ -92,12 +92,14 @@ describe.skipIf(!dockerAvailable())('Audit tamper suite', () => {
         source: 'stub' as const,
       }),
     };
+    const metrics = { recordTsaFailure: () => undefined };
     checkpointer = new CheckpointerService(
       prisma,
       signer,
       tsa,
       worm,
       clock as never,
+      metrics as never,
       config(KEY_REF) as never,
     );
     verify = new VerifyService(prisma);

@@ -8,5 +8,8 @@ export default defineConfig({
     root: './',
     include: ['**/*.e2e-spec.ts'],
     setupFiles: ['reflect-metadata'],
+    env: {
+      OTEL_SDK_DISABLED: 'true',
+    },
   },
 });

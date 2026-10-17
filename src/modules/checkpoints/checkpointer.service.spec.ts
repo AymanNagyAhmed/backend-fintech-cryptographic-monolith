@@ -25,6 +25,9 @@ describe('CheckpointerService', () => {
       source: 'stub',
     }),
   } as unknown as ClockQualityService;
+  const metrics = {
+    recordTsaFailure: vi.fn(),
+  } as never;
 
   it('returns empty when there are no audit events', async () => {
     const prisma = {
@@ -38,6 +41,7 @@ describe('CheckpointerService', () => {
       tsa,
       worm,
       clock,
+      metrics,
       config,
     );
     await expect(service.build()).resolves.toEqual({
@@ -73,6 +77,7 @@ describe('CheckpointerService', () => {
       tsa,
       worm,
       clock,
+      metrics,
       config,
     );
     const result = await service.build();
@@ -113,6 +118,7 @@ describe('CheckpointerService', () => {
       tsa,
       worm,
       clock,
+      metrics,
       config,
     );
     const result = await service.build();
