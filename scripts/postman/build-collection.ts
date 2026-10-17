@@ -78,6 +78,19 @@ const BODIES: Record<string, object> = {
       currency: '{{currency}}',
     },
   },
+  'withdrawals.beneficiaryCreate': {
+    label: 'Cold wallet',
+    currency: 'BTC',
+    address: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
+    network: 'bitcoin',
+  },
+  'withdrawals.beneficiaryConfirm': {
+    totpCode: '{{totpCode}}',
+  },
+  'reserves.compare': {
+    currency: '{{currency}}',
+    reserves: '10000.00',
+  },
 };
 
 /** Header values taken from the environment (set by the collection pre-request script). */
@@ -85,10 +98,27 @@ const HEADER_VALUES: Record<string, string> = {
   'idempotency-key': '{{idempotencyKey}}',
 };
 
+/** Stable query examples (openapi-to-postman invents random floats for bare number schemas). */
+const QUERY_VALUES: Record<string, string> = {
+  from: '{{sthFrom}}',
+  to: '{{sthTo}}',
+  limit: '20',
+  cursor: '',
+  partition: '',
+  partitionKey: '',
+  type: '',
+  subjectRef: '',
+  treeSize: '{{sthTreeSize}}',
+  currency: '{{currency}}',
+};
+
 /** Path variables by context (operationId prefix). */
 const PATH_VARIABLES: Record<string, Record<string, string>> = {
   wallets: { id: '{{walletId}}' },
-  webhooks: { provider: 'stripe' },
+  webhooks: { provider: '{{webhookProvider}}' },
+  withdrawals: { id: '{{beneficiaryId}}' },
+  audit: { eventId: '{{auditEventId}}', treeSize: '{{sthTreeSize}}' },
+  privacy: { userId: '{{userId}}', requestId: '{{erasureRequestId}}' },
 };
 
 /** Folder-level pre-request scripts. */
@@ -161,13 +191,16 @@ function rewriteRequest(item: Item, op: Operation & { operationId: string }) {
   const context = op.operationId.split('.')[0];
   const path = postmanPath(op.path);
   const vars = PATH_VARIABLES[context] ?? {};
-  const query = ((req.url.query ?? []) as Item[]).map((q) => ({
-    key: q.key,
-    value: q.value,
-    description: q.description,
-    disabled: op.optionalQuery.includes(q.key as string),
-  }));
-  const enabled = query.filter((q) => !q.disabled);
+  const query = ((req.url.query ?? []) as Item[]).map((q) => {
+    const key = String(q.key);
+    return {
+      key,
+      value: QUERY_VALUES[key] ?? q.value,
+      description: q.description,
+      disabled: op.optionalQuery.includes(key),
+    };
+  });
+  const enabled = query.filter((q) => !q.disabled && q.value !== '');
   req.url = {
     raw:
       `{{baseUrl}}/${path.join('/')}` +
@@ -204,14 +237,14 @@ function rewriteRequest(item: Item, op: Operation & { operationId: string }) {
     id: stableId(op.operationId),
     name: op.summary ?? op.operationId,
     request: req,
-    // Saved examples only by status (no faked bodies, which would change on every build)
+    // Status-only examples: openapi-to-postmanv2 invents random UUIDs/dates in bodies,
+    // which would make every regenerate a git diff (A-B17 Done-when).
     response: ((item.response ?? []) as Item[]).map((r) => ({
       id: stableId(`${op.operationId}:${r.code}`),
       name: r.name,
       code: r.code,
       status: r.status,
       header: r.header,
-      body: r.code < 400 ? r.body : undefined,
       _postman_previewlanguage: r._postman_previewlanguage,
     })),
     event: events(op.operationId, [

@@ -135,6 +135,21 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 - Website - [https://nestjs.com](https://nestjs.com/)
 - Twitter - [@nestframework](https://twitter.com/nestframework)
 
+## Postman (A-B17)
+
+The collection is generated from the running OpenAPI document (`/v1/docs-json`), so it cannot drift from the code. Hand-written scripts live in `postman/scripts/` and are merged by the generator.
+
+```bash
+# Dev server must be up (make -C ../.. wait — or from modular_monolith: make dev)
+npm run postman:build          # regenerate postman/fintech-monolith.postman_collection.json
+npm run postman:check          # every operationId is in the collection
+npm run postman:env            # fill secrets into git-ignored postman/environments/dev.local.*
+make -C .. db-reset && make -C .. seed
+npm run postman:test           # Newman against the local API (--bail)
+```
+
+Import `postman/fintech-monolith.postman_collection.json` and `postman/environments/dev.local.postman_environment.json` in the Postman app. Re-run `postman:env` after changing `.env`, and `postman:build` after changing an API. Never commit `*.local.*` or secret values in `dev.postman_environment.json`.
+
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
