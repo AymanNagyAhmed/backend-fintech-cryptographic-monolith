@@ -15,12 +15,14 @@ describe('SthService', () => {
           keyId: 'audit-signing:v1',
           signature: 'dGVzdA==',
           tsaToken: Buffer.from('tok'),
+          clockQuality: 'ok',
         }),
       },
     };
     const dto = await new SthService(prisma as never).latest();
     expect(dto.treeSize).toBe(4);
     expect(dto.hasTsaToken).toBe(true);
+    expect(dto.clockQuality).toBe('ok');
   });
 
   it('throws when none exist', async () => {

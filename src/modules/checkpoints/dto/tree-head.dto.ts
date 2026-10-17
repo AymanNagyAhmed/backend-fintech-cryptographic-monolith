@@ -27,4 +27,10 @@ export class TreeHeadDto {
 
   @ApiProperty({ description: 'Whether an RFC 3161 token is stored' })
   hasTsaToken!: boolean;
+
+  @ApiProperty({
+    enum: ['ok', 'degraded', 'unknown'],
+    description: 'Host clock vs NTP at STH write (A-B16.5 / 2.9)',
+  })
+  clockQuality!: 'ok' | 'degraded' | 'unknown';
 }

@@ -44,3 +44,23 @@ docker run --rm --network host alpine:3.24.2 sh -c \
   "apk add -q openssl && openssl s_client -connect localhost:443 -groups X25519MLKEM768 </dev/null 2>&1 | grep -i group"
 # expect: Negotiated TLS1.3 group: X25519MLKEM768
 ```
+
+## Trusted time / chrony (A-B16.5)
+
+Hosts that run the API (and workers) must keep time with **chrony**:
+
+```zsh
+sudo apt-get install -y chrony
+sudo systemctl enable --now chrony
+chronyc tracking   # "System time" |offset| should stay under CLOCK_OFFSET_TOLERANCE_SEC (default 0.1s)
+```
+
+The app shells out to `chronyc -n tracking` (override with `CLOCK_CHRONYC_BIN`). When `|offset|` exceeds `CLOCK_OFFSET_TOLERANCE_SEC`, or chronyc is unreadable:
+
+- new audit leaves include `clockQuality: "degraded"` (or `"unknown"`) in the hashed payload
+- new `audit.tree_heads` rows set `clock_quality` the same way
+- Prometheus scrape `GET /v1/metrics` exposes `fintech_clock_offset_seconds` and `fintech_clock_out_of_tolerance`
+
+Alert rule (load into Prometheus with the rest of the stack in A-B16.7): `modular_monolith/docker/prometheus/alerts/clock.yml`.
+
+In containers without chronyc, set `CLOCK_QUALITY_SOURCE=stub` only for local smoke tests; production must use chronyc (or mount the chrony control socket and install the client).

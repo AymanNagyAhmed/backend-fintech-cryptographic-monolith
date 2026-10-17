@@ -84,11 +84,20 @@ describe.skipIf(!dockerAvailable())('Audit tamper suite', () => {
       stampTreeHead: async () => undefined,
     } as unknown as TsaService;
     const worm = { putBatch: async () => ({}) } as unknown as WormService;
+    const clock = {
+      sample: async () => ({
+        offsetSeconds: 0,
+        quality: 'ok' as const,
+        outOfTolerance: false,
+        source: 'stub' as const,
+      }),
+    };
     checkpointer = new CheckpointerService(
       prisma,
       signer,
       tsa,
       worm,
+      clock as never,
       config(KEY_REF) as never,
     );
     verify = new VerifyService(prisma);

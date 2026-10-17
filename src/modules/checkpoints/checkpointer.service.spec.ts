@@ -1,4 +1,5 @@
 import type { ConfigService } from '@nestjs/config';
+import type { ClockQualityService } from '../../common/clock/clock-quality.service.js';
 import type { EnvironmentVariables } from '../../config/env.validation.js';
 import type { SignerService } from '../crypto/signer.service.js';
 import { CheckpointerService } from './checkpointer.service.js';
@@ -16,6 +17,14 @@ describe('CheckpointerService', () => {
   const worm = {
     putBatch: vi.fn().mockResolvedValue({ key: 'k', skipped: false }),
   } as unknown as WormService;
+  const clock = {
+    sample: vi.fn().mockResolvedValue({
+      offsetSeconds: 0,
+      quality: 'ok',
+      outOfTolerance: false,
+      source: 'stub',
+    }),
+  } as unknown as ClockQualityService;
 
   it('returns empty when there are no audit events', async () => {
     const prisma = {
@@ -28,6 +37,7 @@ describe('CheckpointerService', () => {
       signer,
       tsa,
       worm,
+      clock,
       config,
     );
     await expect(service.build()).resolves.toEqual({
@@ -62,6 +72,7 @@ describe('CheckpointerService', () => {
       signer,
       tsa,
       worm,
+      clock,
       config,
     );
     const result = await service.build();
@@ -101,6 +112,7 @@ describe('CheckpointerService', () => {
       signer,
       tsa,
       worm,
+      clock,
       config,
     );
     const result = await service.build();
@@ -123,6 +135,7 @@ describe('CheckpointerService', () => {
         alg: 'ed25519',
         keyId: 'audit-signing:v1',
         previousSthHash: null,
+        clockQuality: 'ok',
       }),
     });
   });

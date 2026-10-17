@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import type { ClockQualityService } from '../../common/clock/clock-quality.service.js';
 import type { EnvironmentVariables } from '../../config/env.validation.js';
 import type { PrismaService } from '../../database/prisma.service.js';
 import type { OutboxService } from '../outbox/outbox.service.js';
@@ -18,6 +19,15 @@ describe('ChainerService', () => {
     amount: '10.50',
     partitionKey: '1',
   };
+
+  const clockOk = {
+    sample: vi.fn().mockResolvedValue({
+      offsetSeconds: 0,
+      quality: 'ok',
+      outOfTolerance: false,
+      source: 'stub',
+    }),
+  } as unknown as ClockQualityService;
 
   it('chains one outbox row onto an empty partition and marks it processed', async () => {
     const markProcessed = vi.fn().mockResolvedValue(undefined);
@@ -46,6 +56,7 @@ describe('ChainerService', () => {
     const service = new ChainerService(
       { withTx } as unknown as PrismaService,
       { markProcessed } as unknown as OutboxService,
+      clockOk,
       {
         get: () => 2,
       } as unknown as ConfigService<EnvironmentVariables, true>,
@@ -66,6 +77,54 @@ describe('ChainerService', () => {
       },
     });
     expect(markProcessed).toHaveBeenCalledWith(tx, 'ledger', 'out-1');
+  });
+
+  it('stamps clockQuality=degraded on the leaf when the host clock is out of tolerance', async () => {
+    const markProcessed = vi.fn().mockResolvedValue(undefined);
+    const create = vi.fn().mockResolvedValue({});
+    const queryRawTyped = vi
+      .fn()
+      .mockResolvedValueOnce([
+        {
+          context: 'ledger',
+          id: 'out-1',
+          payload,
+          createdAt: new Date(payload.occurredAt),
+        },
+      ])
+      .mockResolvedValueOnce([{ locked: true }])
+      .mockResolvedValueOnce([]);
+    const tx = {
+      $queryRawTyped: queryRawTyped,
+      auditEvent: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        findFirst: vi.fn().mockResolvedValue(null),
+        create,
+      },
+    };
+    const withTx = vi.fn(async (fn: (t: typeof tx) => unknown) => fn(tx));
+    const clockDegraded = {
+      sample: vi.fn().mockResolvedValue({
+        offsetSeconds: 1.5,
+        quality: 'degraded',
+        outOfTolerance: true,
+        source: 'chronyc',
+      }),
+    } as unknown as ClockQualityService;
+    const service = new ChainerService(
+      { withTx } as unknown as PrismaService,
+      { markProcessed } as unknown as OutboxService,
+      clockDegraded,
+      { get: () => 2 } as unknown as ConfigService<EnvironmentVariables, true>,
+    );
+    await service.run();
+    const leaf = { ...payload, clockQuality: 'degraded' };
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        payload: leaf,
+        hash: chainHash(GENESIS_PREV_HASH, leaf),
+      }),
+    });
   });
 
   it('skips when the partition advisory lock is held', async () => {
@@ -94,6 +153,7 @@ describe('ChainerService', () => {
     const service = new ChainerService(
       { withTx } as unknown as PrismaService,
       { markProcessed } as unknown as OutboxService,
+      clockOk,
       { get: () => 2 } as unknown as ConfigService<EnvironmentVariables, true>,
     );
     await expect(service.run()).resolves.toEqual({
