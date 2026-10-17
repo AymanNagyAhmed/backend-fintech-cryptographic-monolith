@@ -16,7 +16,15 @@ const config = new ConfigService({ DATABASE_URL: process.env.DATABASE_URL });
 const prisma = new PrismaService(config as never);
 const emitter = new EventEmitter2({ wildcard: true, delimiter: '.' });
 const outbox = new OutboxService();
-const chainer = new ChainerService(prisma, outbox, {
+const clock = {
+  sample: async () => ({
+    offsetSeconds: 0,
+    quality: 'ok' as const,
+    outOfTolerance: false,
+    source: 'stub' as const,
+  }),
+};
+const chainer = new ChainerService(prisma, outbox, clock as never, {
   get: () => 10,
 } as never);
 

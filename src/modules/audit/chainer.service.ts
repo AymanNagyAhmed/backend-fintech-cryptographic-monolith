@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ClockQualityService } from '../../common/clock/clock-quality.service.js';
 import type { EnvironmentVariables } from '../../config/env.validation.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { Prisma } from '../../generated/prisma/client.js';
@@ -31,6 +32,7 @@ export class ChainerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly outbox: OutboxService,
+    private readonly clock: ClockQualityService,
     config: ConfigService<EnvironmentVariables, true>,
   ) {
     this.batchSize = config.get('CHAINER_BATCH_SIZE', { infer: true });
@@ -107,14 +109,20 @@ export class ChainerService {
       });
       const prevHash = tip?.hash ?? GENESIS_PREV_HASH;
       const seq = tip ? tip.seq + 1n : 1n;
-      const hash = chainHash(prevHash, payload);
+      // Stamp clock quality before hashing so out-of-tolerance leaves are tamper-evident (2.9)
+      const { quality } = await this.clock.sample();
+      const leafPayload =
+        quality === 'ok'
+          ? payload
+          : { ...payload, clockQuality: quality };
+      const hash = chainHash(prevHash, leafPayload);
       const occurredAt = occurredAtOf(payload, createdAt);
       try {
         await tx.auditEvent.create({
           data: {
             partitionKey,
             seq,
-            payload: payload as Prisma.InputJsonValue,
+            payload: leafPayload as Prisma.InputJsonValue,
             prevHash,
             hash,
             sourceContext: context,

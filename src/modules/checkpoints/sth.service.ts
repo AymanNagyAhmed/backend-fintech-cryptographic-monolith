@@ -34,6 +34,7 @@ function toDto(row: {
   keyId: string;
   signature: string;
   tsaToken: Uint8Array | null;
+  clockQuality: string;
 }): TreeHeadDto {
   return {
     id: row.id,
@@ -45,5 +46,6 @@ function toDto(row: {
     keyId: row.keyId,
     signature: row.signature,
     hasTsaToken: row.tsaToken != null && row.tsaToken.length > 0,
+    clockQuality: row.clockQuality as TreeHeadDto['clockQuality'],
   };
 }

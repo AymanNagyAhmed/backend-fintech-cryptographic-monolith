@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ClockQualityService } from '../../common/clock/clock-quality.service.js';
 import type { EnvironmentVariables } from '../../config/env.validation.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { Prisma } from '../../generated/prisma/client.js';
@@ -42,6 +43,7 @@ export class CheckpointerService {
     private readonly signer: SignerService,
     private readonly tsa: TsaService,
     private readonly worm: WormService,
+    private readonly clock: ClockQualityService,
     config: ConfigService<EnvironmentVariables, true>,
   ) {
     this.keyRef = config.get('SIGNING_KEY_NAME', { infer: true });
@@ -101,6 +103,7 @@ export class CheckpointerService {
       sthCanonicalBytes(payload),
       this.keyRef,
     );
+    const { quality: clockQuality } = await this.clock.sample();
 
     try {
       const row = await this.prisma.treeHead.create({
@@ -112,6 +115,7 @@ export class CheckpointerService {
           alg: envelope.alg,
           keyId: envelope.keyId,
           signature: envelope.sig,
+          clockQuality,
         },
       });
       try {

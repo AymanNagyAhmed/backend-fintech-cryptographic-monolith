@@ -312,6 +312,34 @@ export class EnvironmentVariables {
   @IsInt()
   @Min(1)
   CHECKPOINT_INTERVAL_SEC: number;
+
+  /**
+   * Max |chronyc System time| offset in seconds before records are stamped
+   * clockQuality=degraded and Prometheus alerts (A-B16.5 / 2.9). Default 100ms.
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 6 })
+  @Min(0.000001)
+  @Max(60)
+  CLOCK_OFFSET_TOLERANCE_SEC: number = 0.1;
+
+  /** chronyc = shell out to chronyc tracking; stub = offset 0 / ok (tests). */
+  @IsOptional()
+  @IsIn(['chronyc', 'stub'])
+  CLOCK_QUALITY_SOURCE: 'chronyc' | 'stub' = 'chronyc';
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  CLOCK_CHRONYC_BIN: string = 'chronyc';
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(60_000)
+  CLOCK_QUALITY_CACHE_MS: number = 5_000;
 }
 
 // Error text names the variable and the rule only; values are never echoed because they may be secrets.
@@ -328,6 +356,8 @@ export function validate(
     lines.push(
       '  - SIGNER_BACKEND: local keeps keys in memory and is refused in production',
     );
+  // Unit/e2e must not depend on host chrony drift (WSL often has multi-second offset)
+  if (env.NODE_ENV === 'test') env.CLOCK_QUALITY_SOURCE = 'stub';
   if (lines.length > 0)
     throw new Error(`Invalid environment configuration:\n${lines.join('\n')}`);
   return env;

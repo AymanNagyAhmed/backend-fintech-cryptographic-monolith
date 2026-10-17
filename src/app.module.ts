@@ -4,9 +4,11 @@ import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
+import { ClockQualityModule } from './common/clock/clock-quality.module.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { IdempotencyJobsModule } from './common/idempotency/jobs/idempotency-jobs.module.js';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor.js';
+import { MetricsModule } from './common/metrics/metrics.module.js';
 import { createValidationPipe } from './common/pipes/validation.pipe.js';
 import { QueueModule } from './common/queue/queue.module.js';
 import { RateLimitModule } from './common/throttler/rate-limit.module.js';
@@ -46,6 +48,8 @@ import { ReservesModule } from './modules/reserves/reserves.module.js';
         loggerParams(config.get('NODE_ENV', { infer: true })),
     }),
     DatabaseModule,
+    ClockQualityModule,
+    MetricsModule,
     QueueModule,
     RateLimitModule,
     HealthModule,

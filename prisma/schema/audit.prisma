@@ -31,6 +31,8 @@ model TreeHead {
   keyId           String    @map("key_id") @db.VarChar(128)
   signature       String    @db.Text
   tsaToken        Bytes?    @map("tsa_token")
+  // Host clock vs NTP at STH write time (A-B16.5 / 2.9); not part of the signed payload
+  clockQuality    String    @default("ok") @map("clock_quality") @db.VarChar(16)
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@unique([treeSize])
