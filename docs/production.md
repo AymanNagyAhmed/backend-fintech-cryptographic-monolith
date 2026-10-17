@@ -64,3 +64,7 @@ The app shells out to `chronyc -n tracking` (override with `CLOCK_CHRONYC_BIN`).
 Alert rule (load into Prometheus with the rest of the stack in A-B16.7): `modular_monolith/docker/prometheus/alerts/clock.yml`.
 
 In containers without chronyc, set `CLOCK_QUALITY_SOURCE=stub` only for local smoke tests; production must use chronyc (or mount the chrony control socket and install the client).
+
+## Backups (A-B16.6)
+
+See [backups.md](./backups.md). Postgres runs with WAL `archive_mode`; verify a restore with `make -C .. db-restore-test` from `backend_monolith/` (or `make db-restore-test` from `modular_monolith/`).

@@ -1,36 +1,40 @@
 /**
  * CLI: npm run audit:verify [-- --partition=1]
  * Needs DATABASE_URL (app_writer). Exit 0 when ok, 1 when broken/gaps/duplicates.
+ * Instantiates Prisma like scripts/reconcile.ts (no Nest DI) so env overrides work
+ * for restore_test smoke (A-B16.6).
  */
-import { ConfigModule } from '@nestjs/config';
-import { NestFactory } from '@nestjs/core';
-import { Module } from '@nestjs/common';
-import { validate } from '../../config/env.validation.js';
-import { DatabaseModule } from '../../database/database.module.js';
+import 'reflect-metadata';
+import type { ConfigService } from '@nestjs/config';
+import {
+  validate,
+  type EnvironmentVariables,
+} from '../../config/env.validation.js';
+import { PrismaService } from '../../database/prisma.service.js';
 import { VerifyService } from './verify.service.js';
 
-@Module({
-  imports: [
-    ConfigModule.forRoot({ isGlobal: true, validate }),
-    DatabaseModule,
-  ],
-  providers: [VerifyService],
-})
-class VerifyCliModule {}
+process.loadEnvFile(new URL('../../../.env', import.meta.url));
+const env = validate(process.env);
+const config = {
+  get: (key: keyof EnvironmentVariables) => env[key],
+} as unknown as ConfigService<EnvironmentVariables, true>;
 
 async function main(): Promise<void> {
   const partitionArg = process.argv.find((a) => a.startsWith('--partition='));
   const partition = partitionArg?.slice('--partition='.length);
-  const app = await NestFactory.createApplicationContext(VerifyCliModule, {
-    logger: false,
-  });
+  const prisma = new PrismaService(config);
   try {
-    const report = await app.get(VerifyService).verify(partition || undefined);
-    console.log(JSON.stringify(report, null, 2));
+    const report = await new VerifyService(prisma).verify(
+      partition || undefined,
+    );
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
     process.exitCode = report.ok ? 0 : 1;
   } finally {
-    await app.close();
+    await prisma.$disconnect();
   }
 }
 
-void main();
+main().catch((err: unknown) => {
+  console.error(err);
+  process.exitCode = 1;
+});
