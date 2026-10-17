@@ -45,9 +45,12 @@ RUN npm ci --omit=dev \
   && test ! -d node_modules/vitest \
   && test ! -d node_modules/prisma
 COPY --from=build --chown=node:node /app/dist ./dist
+# Compose prod secrets loader (A-B16.2)
+COPY --chmod=755 docker/entrypoint.sh /entrypoint.sh
 USER node
 ENV NODE_ENV=production
 EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
   CMD wget -qO- http://127.0.0.1:3000/v1/health/live >/dev/null || exit 1
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["node", "dist/main.js"]
