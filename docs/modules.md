@@ -17,6 +17,7 @@ flowchart LR
   compliance["compliance"] --> audit["audit"]
   compliance["compliance"] --> auth["auth"]
   compliance["compliance"] --> crypto["crypto"]
+  crypto["crypto"] --> outbox["outbox"]
   payments["payments"] --> ledger["ledger"]
   payments["payments"] --> wallets["wallets"]
   privacy["privacy"] --> auth["auth"]
@@ -40,7 +41,7 @@ flowchart LR
 |---|---|---:|---:|
 | audit | auth | 3 | 1 |
 | audit | outbox | 14 | 6 |
-| auth | users | 2 | 0 |
+| auth | users | 5 | 2 |
 | b2b | auth | 2 | 1 |
 | checkpoints | audit | 2 | 0 |
 | checkpoints | auth | 3 | 1 |
@@ -48,6 +49,7 @@ flowchart LR
 | compliance | audit | 3 | 0 |
 | compliance | auth | 3 | 1 |
 | compliance | crypto | 2 | 0 |
+| crypto | outbox | 3 | 1 |
 | payments | ledger | 6 | 1 |
 | payments | wallets | 3 | 1 |
 | privacy | auth | 3 | 1 |

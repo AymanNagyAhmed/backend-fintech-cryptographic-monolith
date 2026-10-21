@@ -1,7 +1,10 @@
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { generateKeyPairSync, sign, verify } from 'node:crypto';
 import type { MetricsService } from '../../common/metrics/metrics.service.js';
 import type { EnvironmentVariables } from '../../config/env.validation.js';
+import type { PrismaService } from '../../database/prisma.service.js';
+import type { OutboxService } from '../outbox/outbox.service.js';
 import { LocalTestSigner } from './adapters/local-test.signer.js';
 import { SignerContractException } from './exceptions/signer-contract.exception.js';
 import type { SignatureEnvelope, Signer, SigningAlg } from './signer.js';
@@ -355,5 +358,125 @@ describe('SignerService', () => {
       'postgres down',
     );
     expect(backend.verify).not.toHaveBeenCalled();
+  });
+
+  const activeKey = {
+    keyId: 'audit-signing:v1',
+    version: 1,
+    alg: 'ed25519' as const,
+    publicKey: 'unused',
+    activatedAt: '2026-10-16T12:00:00.000Z',
+    revokedAt: null,
+  };
+
+  function auditedService(
+    find: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue(activeKey),
+    enqueue: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue('out-1'),
+  ) {
+    const tx = { id: 'tx' };
+    const withTx = vi.fn(async (fn: (t: unknown) => Promise<unknown>) =>
+      fn(tx),
+    );
+    const recordSignatureVerifyFailure = vi.fn();
+    const audited = new SignerService(
+      backend,
+      keysStub(find),
+      configOf('ed25519'),
+      { recordSignatureVerifyFailure } as unknown as MetricsService,
+      { withTx } as unknown as PrismaService,
+      { enqueue } as unknown as OutboxService,
+    );
+    return { audited, enqueue, tx, recordSignatureVerifyFailure };
+  }
+
+  it('does not audit a signature that verifies', async () => {
+    const { audited, enqueue, recordSignatureVerifyFailure } = auditedService();
+    const envelope = await audited.sign(message, 'audit-signing');
+    expect(await audited.verify(message, envelope)).toBe(true);
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(recordSignatureVerifyFailure).not.toHaveBeenCalled();
+  });
+
+  it('enqueues crypto.signature.rejected for a bad signature of a published key', async () => {
+    const { audited, enqueue, tx, recordSignatureVerifyFailure } =
+      auditedService();
+    const envelope = await audited.sign(message, 'audit-signing');
+    expect(
+      await audited.verify(new TextEncoder().encode('tree_size=41'), envelope),
+    ).toBe(false);
+    expect(recordSignatureVerifyFailure).toHaveBeenCalledTimes(1);
+    expect(enqueue).toHaveBeenCalledWith(tx, 'auth', {
+      type: 'crypto.signature.rejected',
+      schemaVersion: 1,
+      occurredAt: expect.any(String),
+      actor: { subjectRef: 'signer' },
+      partitionKey: 'audit-signing:v1',
+      reason: 'mismatch',
+      keyId: 'audit-signing:v1',
+    });
+    const payload = enqueue.mock.calls[0][2] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty('sig');
+    expect(JSON.stringify(payload)).not.toContain(envelope.sig);
+  });
+
+  it('records unknown_key when the catalog has no row and the signature fails', async () => {
+    const { audited, enqueue } = auditedService(
+      vi.fn().mockResolvedValue(null),
+    );
+    const envelope = await audited.sign(message, 'audit-signing');
+    expect(
+      await audited.verify(new TextEncoder().encode('tree_size=41'), envelope),
+    ).toBe(false);
+    expect(enqueue).toHaveBeenCalledWith(
+      expect.anything(),
+      'auth',
+      expect.objectContaining({ reason: 'unknown_key', keyId: envelope.keyId }),
+    );
+  });
+
+  it('records malformed without a keyId and revoked with the keyId', async () => {
+    const { audited, enqueue } = auditedService();
+    expect(
+      await audited.verify(message, null as unknown as SignatureEnvelope),
+    ).toBe(false);
+    expect(enqueue).toHaveBeenCalledWith(
+      expect.anything(),
+      'auth',
+      expect.objectContaining({ reason: 'malformed' }),
+    );
+    expect(enqueue.mock.calls[0][2]).not.toHaveProperty('keyId');
+
+    const find = vi.fn().mockResolvedValue({
+      ...activeKey,
+      revokedAt: '2026-10-16T18:00:00.000Z',
+    });
+    const revoked = auditedService(find);
+    const envelope = await revoked.audited.sign(message, 'audit-signing');
+    expect(await revoked.audited.verify(message, envelope)).toBe(false);
+    expect(revoked.enqueue).toHaveBeenCalledWith(
+      expect.anything(),
+      'auth',
+      expect.objectContaining({ reason: 'revoked', keyId: 'audit-signing:v1' }),
+    );
+  });
+
+  it('still returns false when the rejection audit write throws', async () => {
+    const warn = vi
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => {});
+    const enqueue = vi
+      .fn()
+      .mockRejectedValue(new Error('outbox insert failed'));
+    const { audited, recordSignatureVerifyFailure } = auditedService(
+      vi.fn().mockResolvedValue(activeKey),
+      enqueue,
+    );
+    const envelope = await audited.sign(message, 'audit-signing');
+    expect(
+      await audited.verify(new TextEncoder().encode('tree_size=41'), envelope),
+    ).toBe(false);
+    expect(recordSignatureVerifyFailure).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

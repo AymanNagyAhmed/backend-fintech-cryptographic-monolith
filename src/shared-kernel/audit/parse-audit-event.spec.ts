@@ -82,12 +82,62 @@ describe('parseAuditEvent', () => {
       'auth.user.login',
       'auth.user.registered',
       'beneficiary.confirmed',
+      'crypto.signature.rejected',
       'custody.sign',
       'erasure.completed',
       'payment.webhook.accepted',
       'transfer.completed',
       'wallet.created',
     ]);
+  });
+
+  it('accepts crypto.signature.rejected.v1 without the signature or payload', () => {
+    expect(
+      parseAuditEvent({
+        type: 'crypto.signature.rejected',
+        schemaVersion: 1,
+        occurredAt,
+        actor,
+        reason: 'mismatch',
+        keyId: 'audit-signing:v1',
+      }),
+    ).toMatchObject({
+      type: 'crypto.signature.rejected',
+      reason: 'mismatch',
+      keyId: 'audit-signing:v1',
+    });
+    expect(
+      parseAuditEvent({
+        type: 'crypto.signature.rejected',
+        schemaVersion: 1,
+        occurredAt,
+        actor,
+        reason: 'malformed',
+      }),
+    ).toMatchObject({ reason: 'malformed' });
+  });
+
+  it('rejects a signature or an unknown reason on crypto.signature.rejected', () => {
+    expect(() =>
+      parseAuditEvent({
+        type: 'crypto.signature.rejected',
+        schemaVersion: 1,
+        occurredAt,
+        actor,
+        reason: 'mismatch',
+        keyId: 'audit-signing:v1',
+        sig: 'AAAA',
+      }),
+    ).toThrow(AuditSchemaException);
+    expect(() =>
+      parseAuditEvent({
+        type: 'crypto.signature.rejected',
+        schemaVersion: 1,
+        occurredAt,
+        actor,
+        reason: 'expired',
+      }),
+    ).toThrow(AuditSchemaException);
   });
 
   it('accepts audit.access.v1', () => {
@@ -103,4 +153,3 @@ describe('parseAuditEvent', () => {
     ).toMatchObject({ type: 'audit.access', operation: 'verify' });
   });
 });
-
