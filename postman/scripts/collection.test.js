@@ -7,6 +7,12 @@ const tolerated = {
   'auth.register': ['EMAIL_TAKEN'],
   // Allow-list confirm without an enrolled TOTP in the Newman smoke env
   'withdrawals.beneficiaryConfirm': ['INVALID_TOTP', 'TOTP_REQUIRED'],
+  'withdrawals.create': [
+    'INVALID_TOTP',
+    'TOTP_REQUIRED',
+    'BENEFICIARY_NOT_ACTIVE',
+    'BENEFICIARY_NOT_FOUND',
+  ],
   // Privileged audit/compliance routes need MFA compliance user
   'audit.verify': ['FORBIDDEN', 'UNAUTHORIZED'],
   'audit.sthLatest': ['FORBIDDEN', 'UNAUTHORIZED', 'NOT_FOUND'],

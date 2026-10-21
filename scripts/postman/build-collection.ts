@@ -53,6 +53,10 @@ const REQUEST_ORDER = [
   'auth.totpSetup',
   'auth.totpEnable',
   'auth.logout',
+  'withdrawals.beneficiaryCreate',
+  'withdrawals.beneficiaryList',
+  'withdrawals.beneficiaryConfirm',
+  'withdrawals.create',
 ];
 
 /** Bodies that use environment variables instead of the DTO examples. */
@@ -77,6 +81,13 @@ const BODIES: Record<string, object> = {
       amount: '{{amount}}',
       currency: '{{currency}}',
     },
+  },
+  'withdrawals.create': {
+    walletId: '{{walletId}}',
+    beneficiaryId: '{{beneficiaryId}}',
+    amount: '{{amount}}',
+    currency: '{{currency}}',
+    totpCode: '{{totpCode}}',
   },
   'withdrawals.beneficiaryCreate': {
     label: 'Cold wallet',

@@ -31,7 +31,9 @@ flowchart LR
   wallets["wallets"] --> ledger["ledger"]
   withdrawals["withdrawals"] --> auth["auth"]
   withdrawals["withdrawals"] --> crypto["crypto"]
+  withdrawals["withdrawals"] --> ledger["ledger"]
   withdrawals["withdrawals"] --> outbox["outbox"]
+  withdrawals["withdrawals"] --> wallets["wallets"]
 ```
 
 | From | To | Imports | Type-only |
@@ -58,6 +60,8 @@ flowchart LR
 | transfers | wallets | 4 | 2 |
 | wallets | auth | 2 | 1 |
 | wallets | ledger | 3 | 1 |
-| withdrawals | auth | 5 | 2 |
+| withdrawals | auth | 7 | 3 |
 | withdrawals | crypto | 4 | 2 |
+| withdrawals | ledger | 4 | 1 |
 | withdrawals | outbox | 5 | 2 |
+| withdrawals | wallets | 3 | 1 |
