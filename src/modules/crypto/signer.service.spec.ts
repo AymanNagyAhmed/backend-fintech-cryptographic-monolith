@@ -213,6 +213,93 @@ describe('SignerService', () => {
     expect(find).toHaveBeenCalledWith('audit-signing:v1');
   });
 
+  it('verifies a revoked key when the artifact is anchored strictly before revokedAt', async () => {
+    const find = vi.fn().mockResolvedValue({
+      keyId: 'audit-signing:v1',
+      version: 1,
+      alg: 'ed25519',
+      publicKey: 'unused',
+      activatedAt: '2026-10-16T12:00:00.000Z',
+      revokedAt: '2026-10-16T18:00:00.000Z',
+    });
+    const revoked = new SignerService(
+      backend,
+      keysStub(find),
+      configOf('ed25519'),
+    );
+    const envelope = await revoked.sign(message, 'audit-signing');
+    vi.clearAllMocks();
+    const anchor = {
+      signedAt: new Date('2026-10-16T17:59:59.000Z'),
+      anchored: true,
+    };
+    expect(await revoked.verify(message, envelope, anchor)).toBe(true);
+    expect(
+      await revoked.verify(
+        new TextEncoder().encode('tree_size=41'),
+        envelope,
+        anchor,
+      ),
+    ).toBe(false);
+    expect(backend.verify).toHaveBeenCalledWith(message, envelope);
+  });
+
+  it('rejects a revoked key at or after revokedAt even when the artifact is anchored', async () => {
+    const find = vi.fn().mockResolvedValue({
+      keyId: 'audit-signing:v1',
+      version: 1,
+      alg: 'ed25519',
+      publicKey: 'unused',
+      activatedAt: '2026-10-16T12:00:00.000Z',
+      revokedAt: '2026-10-16T18:00:00.000Z',
+    });
+    const revoked = new SignerService(
+      backend,
+      keysStub(find),
+      configOf('ed25519'),
+    );
+    const envelope = await revoked.sign(message, 'audit-signing');
+    vi.clearAllMocks();
+    expect(
+      await revoked.verify(message, envelope, {
+        signedAt: new Date('2026-10-16T18:00:00.000Z'),
+        anchored: true,
+      }),
+    ).toBe(false);
+    expect(
+      await revoked.verify(message, envelope, {
+        signedAt: new Date('2026-10-16T18:00:01.000Z'),
+        anchored: true,
+      }),
+    ).toBe(false);
+    expect(backend.verify).not.toHaveBeenCalled();
+  });
+
+  it('rejects a pre-revocation signature when the TSA token is not stored', async () => {
+    const find = vi.fn().mockResolvedValue({
+      keyId: 'audit-signing:v1',
+      version: 1,
+      alg: 'ed25519',
+      publicKey: 'unused',
+      activatedAt: '2026-10-16T12:00:00.000Z',
+      revokedAt: '2026-10-16T18:00:00.000Z',
+    });
+    const revoked = new SignerService(
+      backend,
+      keysStub(find),
+      configOf('ed25519'),
+    );
+    const envelope = await revoked.sign(message, 'audit-signing');
+    vi.clearAllMocks();
+    expect(
+      await revoked.verify(message, envelope, {
+        signedAt: new Date('2026-10-16T12:00:00.000Z'),
+        anchored: false,
+      }),
+    ).toBe(false);
+    expect(backend.verify).not.toHaveBeenCalled();
+  });
+
   it('still verifies when the catalog lists the key without revokedAt', async () => {
     const find = vi.fn().mockResolvedValue({
       keyId: 'audit-signing:v1',
