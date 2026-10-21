@@ -18,4 +18,10 @@ export class ConsistencyProofDto {
 
   @ApiProperty()
   verified!: boolean;
+
+  @ApiProperty({
+    description:
+      'True only when both published heads have a stored RFC 3161 token',
+  })
+  timeAnchored!: boolean;
 }

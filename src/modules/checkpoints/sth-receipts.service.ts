@@ -24,7 +24,7 @@ export class SthReceiptsService {
   async pushLatest(): Promise<{ pushed: boolean; treeSize?: number }> {
     let latest: TreeHeadDto;
     try {
-      latest = await this.sth.latest();
+      latest = await this.sth.latestAnchored();
     } catch {
       return { pushed: false };
     }

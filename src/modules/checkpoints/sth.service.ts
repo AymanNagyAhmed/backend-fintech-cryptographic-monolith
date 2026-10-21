@@ -18,10 +18,28 @@ export class SthService {
     const row = await this.prisma.treeHead.findUnique({
       where: { treeSize },
     });
-    if (!row)
-      throw new NotFoundException(`no STH for treeSize=${treeSize}`);
+    if (!row) throw new NotFoundException(`no STH for treeSize=${treeSize}`);
     return toDto(row);
   }
+
+  /**
+   * Newest signed tree head whose RFC 3161 token is already stored.
+   * A head written while the TSA is down is skipped.
+   */
+  async latestAnchored(): Promise<TreeHeadDto> {
+    const rows = await this.prisma.treeHead.findMany({
+      where: { tsaToken: { not: null } },
+      orderBy: { treeSize: 'desc' },
+    });
+    const row = rows.find((candidate) => storedTsaToken(candidate.tsaToken));
+    if (!row)
+      throw new NotFoundException('no time-anchored tree head published yet');
+    return toDto(row);
+  }
+}
+
+export function storedTsaToken(token: Uint8Array | null | undefined): boolean {
+  return token != null && token.length > 0;
 }
 
 function toDto(row: {
@@ -45,7 +63,8 @@ function toDto(row: {
     alg: row.alg,
     keyId: row.keyId,
     signature: row.signature,
-    hasTsaToken: row.tsaToken != null && row.tsaToken.length > 0,
+    hasTsaToken: storedTsaToken(row.tsaToken),
+    timeAnchored: storedTsaToken(row.tsaToken),
     clockQuality: row.clockQuality as TreeHeadDto['clockQuality'],
   };
 }
