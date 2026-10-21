@@ -4,6 +4,8 @@ import { LedgerModule } from '../ledger/ledger.module.js';
 import { WalletsModule } from '../wallets/wallets.module.js';
 import { WebhookSignatureGuard } from './guards/webhook-signature.guard.js';
 import { PaymentsService } from './payments.service.js';
+import { PROVIDER_EVENTS } from './provider-events.js';
+import { StripeEventClient } from './stripe-event.client.js';
 import { WebhookEventsService } from './webhook-events.service.js';
 import { WebhooksController } from './webhooks.controller.js';
 
@@ -11,6 +13,12 @@ import { WebhooksController } from './webhooks.controller.js';
 @Module({
   imports: [IdempotencyModule, LedgerModule, WalletsModule],
   controllers: [WebhooksController],
-  providers: [PaymentsService, WebhookEventsService, WebhookSignatureGuard],
+  providers: [
+    PaymentsService,
+    WebhookEventsService,
+    WebhookSignatureGuard,
+    StripeEventClient,
+    { provide: PROVIDER_EVENTS, useExisting: StripeEventClient },
+  ],
 })
 export class PaymentsModule {}

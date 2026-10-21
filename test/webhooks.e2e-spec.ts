@@ -8,10 +8,32 @@ import type { App } from 'supertest/types.js';
 import { AppModule } from '../src/app.module.js';
 import { setupApp } from '../src/app.setup.js';
 import { canonicalJsonSha256 } from '../src/common/crypto/canonical-json.js';
+import { isCurrency } from '../src/common/money/currency.js';
+import { Money } from '../src/common/money/money.js';
 import type { EnvironmentVariables } from '../src/config/env.validation.js';
 import { PrismaService } from '../src/database/prisma.service.js';
 import { LedgerService } from '../src/modules/ledger/ledger.service.js';
+import {
+  PROVIDER_EVENTS,
+  ProviderEventUnavailable,
+  type ProviderEvents,
+  type ProviderPayment,
+} from '../src/modules/payments/provider-events.js';
 import { signWebhookHeaders } from '../src/modules/payments/webhook-signature.js';
+
+/** E2e stand-in for Stripe's event retrieve. A missing row is a failed fetch. */
+class ScriptedProviderEvents implements ProviderEvents {
+  readonly rows = new Map<string, ProviderPayment | 'fail'>();
+
+  load(provider: 'stripe', eventId: string): Promise<ProviderPayment> {
+    const row = this.rows.get(eventId);
+    if (!row || row === 'fail' || row.provider !== provider)
+      return Promise.reject(new ProviderEventUnavailable());
+    return Promise.resolve(row);
+  }
+}
+
+const providerEvents = new ScriptedProviderEvents();
 
 const PATH = '/v1/webhooks/stripe';
 
@@ -40,13 +62,53 @@ describe('Payment webhooks (e2e)', () => {
       type: 'payment.succeeded',
       data: { walletId, amount, currency },
     });
+  const UUID =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  /** A valid payment.succeeded with no scripted row is a matching provider record. */
+  const rememberMatch = (body: string) => {
+    try {
+      const parsed = JSON.parse(body) as {
+        id?: string;
+        type?: string;
+        data?: { walletId?: unknown; amount?: unknown; currency?: unknown };
+      };
+      const data = parsed.data;
+      if (
+        parsed.type !== 'payment.succeeded' ||
+        !parsed.id ||
+        !data ||
+        providerEvents.rows.has(parsed.id) ||
+        typeof data.walletId !== 'string' ||
+        !UUID.test(data.walletId) ||
+        typeof data.amount !== 'string' ||
+        !isCurrency(data.currency)
+      )
+        return;
+      Money.of(data.amount, data.currency);
+      providerEvents.rows.set(parsed.id, {
+        provider: 'stripe',
+        eventId: parsed.id,
+        destination: data.walletId,
+        amount: data.amount,
+        currency: data.currency,
+      });
+    } catch {
+      // Non-JSON or an amount the ledger would refuse: nothing to retrieve.
+    }
+  };
   const send = (
     body: string,
     headers: Record<string, string> = signWebhookHeaders(secret, body),
     path = PATH,
     contentType = 'application/json',
-  ) =>
-    http().post(path).set(headers).set('Content-Type', contentType).send(body);
+  ) => {
+    rememberMatch(body);
+    return http()
+      .post(path)
+      .set(headers)
+      .set('Content-Type', contentType)
+      .send(body);
+  };
 
   const newUser = async () => {
     const email = `e2e-${randomUUID()}@example.com`;
@@ -86,6 +148,8 @@ describe('Payment webhooks (e2e)', () => {
       // Limits are covered by rate-limit.e2e-spec.ts
       .overrideProvider(ThrottlerGuard)
       .useValue({ canActivate: () => true })
+      .overrideProvider(PROVIDER_EVENTS)
+      .useValue(providerEvents)
       .compile();
     // rawBody as in main.ts: the signature is over the exact bytes sent
     app = moduleRef.createNestApplication<INestApplication<App>>({
@@ -229,6 +293,39 @@ describe('Payment webhooks (e2e)', () => {
 
     beforeEach(async () => {
       user = await newUser();
+    });
+
+    it('does not credit when the provider record shows a different amount', async () => {
+      const walletId = await newWallet(user);
+      const body = depositBody(walletId, '250.00');
+      const id = eventIdOf(body);
+      providerEvents.rows.set(id, {
+        provider: 'stripe',
+        eventId: id,
+        destination: walletId,
+        amount: '1.00',
+        currency: 'AED',
+      });
+      const res = await send(body).expect(200);
+      expect(res.body.data).toMatchObject({
+        status: 'rejected',
+        reason: { code: 'PROVIDER_MISMATCH' },
+      });
+      expect(await balance(user, walletId)).toBe('0.00');
+      expect(await entriesOf(id)).toBe(0);
+      const again = await send(body).expect(200);
+      expect(again.headers['idempotent-replayed']).toBe('true');
+      expect(await balance(user, walletId)).toBe('0.00');
+    });
+
+    it('does not credit when the provider event cannot be loaded', async () => {
+      const walletId = await newWallet(user);
+      const body = depositBody(walletId, '80.00');
+      providerEvents.rows.set(eventIdOf(body), 'fail');
+      const res = await send(body).expect(200);
+      expect(res.body.data.reason.code).toBe('PROVIDER_UNAVAILABLE');
+      expect(await balance(user, walletId)).toBe('0.00');
+      expect(await entriesOf(eventIdOf(body))).toBe(0);
     });
 
     it('credits the wallet once and answers the receipt', async () => {

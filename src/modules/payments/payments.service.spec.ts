@@ -6,6 +6,11 @@ import { postingExists } from '../ledger/exceptions/ledger.exceptions.js';
 import type { LedgerService } from '../ledger/ledger.service.js';
 import type { WalletView, WalletsService } from '../wallets/wallets.service.js';
 import { PaymentsService } from './payments.service.js';
+import {
+  ProviderEventUnavailable,
+  type ProviderEvents,
+  type ProviderPayment,
+} from './provider-events.js';
 import type { WebhookEventsService } from './webhook-events.service.js';
 
 const WALLET_ID = '019a1b2c-3d4e-7f60-8a9b-0c1d2e3f4a70';
@@ -42,12 +47,22 @@ const ensureSystemAccount = vi.fn();
 const post = vi.fn();
 const find = vi.fn();
 const record = vi.fn();
+const load = vi.fn(
+  async (provider: 'stripe', eventId: string): Promise<ProviderPayment> => ({
+    provider,
+    eventId,
+    amount: event.data.amount,
+    currency: event.data.currency,
+    destination: event.data.walletId,
+  }),
+);
 
 const service = new PaymentsService(
   { runOnce } as unknown as IdempotencyService,
   { ensureSystemAccount, post } as unknown as LedgerService,
   { findById } as unknown as WalletsService,
   { find, record } as unknown as WebhookEventsService,
+  { load } as unknown as ProviderEvents,
 );
 const TIMESTAMP = '1760464800';
 const receive = (body: unknown) => service.receive('stripe', body, TIMESTAMP);
@@ -149,6 +164,7 @@ describe('PaymentsService', () => {
       expect(findById).not.toHaveBeenCalled();
       expect(post).not.toHaveBeenCalled();
       expect(record).not.toHaveBeenCalled();
+      expect(load).not.toHaveBeenCalled();
     });
 
     it('answers 422 IDEMPOTENCY_KEY_REUSED when the stored row has another body', async () => {
@@ -175,6 +191,10 @@ describe('PaymentsService', () => {
     expect(ensureSystemAccount).toHaveBeenCalledWith(
       { code: 'clearing:stripe:aed', currency: 'AED', allowNegative: true },
       tx,
+    );
+    expect(load).toHaveBeenCalledWith('stripe', event.id);
+    expect(load.mock.invocationCallOrder[0]).toBeLessThan(
+      post.mock.invocationCallOrder[0],
     );
     expect(post).toHaveBeenCalledWith(
       {
@@ -209,6 +229,7 @@ describe('PaymentsService', () => {
     });
     expect(findById).not.toHaveBeenCalled();
     expect(post).not.toHaveBeenCalled();
+    expect(load).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -259,6 +280,64 @@ describe('PaymentsService', () => {
     const res = await receive(event);
     expect(res.body).toMatchObject({ status: 'credited' });
     expect(savepoints).toContain('ROLLBACK TO SAVEPOINT webhook_deposit');
+  });
+
+  it('does not credit when the provider record shows a different amount', async () => {
+    load.mockResolvedValueOnce({
+      provider: 'stripe',
+      eventId: event.id,
+      amount: '1.00',
+      currency: 'AED',
+      destination: WALLET_ID,
+    });
+    const res = await receive(event);
+    expect(res.body).toMatchObject({
+      status: 'rejected',
+      reason: {
+        code: 'PROVIDER_MISMATCH',
+        message: 'The provider record does not match the signed callback.',
+      },
+    });
+    expect(post).not.toHaveBeenCalled();
+    expect(record).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ outcome: 'rejected' }),
+    );
+    const { requestHash } = record.mock.calls[0][1] as { requestHash: string };
+    vi.clearAllMocks();
+    find.mockResolvedValue({
+      outcome: 'rejected',
+      reason: res.body.reason,
+      requestHash,
+    });
+    const again = await receive(event);
+    expect(again.body).toMatchObject({ status: 'rejected' });
+    expect(load).not.toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('stores a failed provider fetch as rejected and does not post', async () => {
+    load.mockRejectedValueOnce(new ProviderEventUnavailable());
+    const res = await receive(event);
+    expect(res.body).toMatchObject({
+      status: 'rejected',
+      reason: { code: 'PROVIDER_UNAVAILABLE' },
+    });
+    expect(post).not.toHaveBeenCalled();
+    expect(ensureSystemAccount).not.toHaveBeenCalled();
+    expect(record).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        outcome: 'rejected',
+        reason: expect.objectContaining({ code: 'PROVIDER_UNAVAILABLE' }),
+      }),
+    );
+    expect(runOnce).toHaveBeenCalledWith(
+      'webhook:stripe',
+      event.id,
+      event,
+      expect.any(Function),
+    );
   });
 
   it('lets other ledger errors roll the whole transaction back', async () => {
