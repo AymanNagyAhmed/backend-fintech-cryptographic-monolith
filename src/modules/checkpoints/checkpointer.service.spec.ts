@@ -3,7 +3,11 @@ import type { ClockQualityService } from '../../common/clock/clock-quality.servi
 import type { EnvironmentVariables } from '../../config/env.validation.js';
 import type { SignerService } from '../crypto/signer.service.js';
 import { CheckpointerService } from './checkpointer.service.js';
-import { auditLeafDigest, merkleHashToHex, merkleRoot } from '../../common/crypto/merkle.js';
+import {
+  auditLeafDigest,
+  merkleHashToHex,
+  merkleRoot,
+} from '../../common/crypto/merkle.js';
 import type { TsaService } from './tsa.service.js';
 import type { WormService } from './worm.service.js';
 
@@ -27,7 +31,7 @@ describe('CheckpointerService', () => {
   } as unknown as ClockQualityService;
   const metrics = {
     recordTsaFailure: vi.fn(),
-  } as never;
+  };
 
   it('returns empty when there are no audit events', async () => {
     const prisma = {
@@ -41,7 +45,7 @@ describe('CheckpointerService', () => {
       tsa,
       worm,
       clock,
-      metrics,
+      metrics as never,
       config,
     );
     await expect(service.build()).resolves.toEqual({
@@ -77,7 +81,7 @@ describe('CheckpointerService', () => {
       tsa,
       worm,
       clock,
-      metrics,
+      metrics as never,
       config,
     );
     const result = await service.build();
@@ -118,7 +122,7 @@ describe('CheckpointerService', () => {
       tsa,
       worm,
       clock,
-      metrics,
+      metrics as never,
       config,
     );
     const result = await service.build();
@@ -144,5 +148,44 @@ describe('CheckpointerService', () => {
         clockQuality: 'ok',
       }),
     });
+    expect(
+      prisma.treeHead.create.mock.calls[0]?.[0].data.tsaToken,
+    ).toBeUndefined();
+  });
+
+  it('stores the signed head when the TSA stamp fails', async () => {
+    const rows = [{ id: 'e1', hash: 'aa'.repeat(32) }];
+    const prisma = {
+      auditEvent: { findMany: vi.fn().mockResolvedValue(rows) },
+      treeHead: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockResolvedValue({ id: 'sth-unstamped' }),
+      },
+    };
+    const signer = {
+      sign: vi.fn().mockResolvedValue({
+        alg: 'ed25519',
+        keyId: 'audit-signing:v1',
+        sig: 'dGVzdA==',
+      }),
+    } as unknown as SignerService;
+    vi.mocked(tsa.stampTreeHead).mockRejectedValueOnce(new Error('tsa down'));
+    const service = new CheckpointerService(
+      prisma as never,
+      signer,
+      tsa,
+      worm,
+      clock,
+      metrics as never,
+      config,
+    );
+    const result = await service.build();
+    expect(result.sthId).toBe('sth-unstamped');
+    expect(result.empty).toBe(false);
+    expect(
+      prisma.treeHead.create.mock.calls[0]?.[0].data.tsaToken,
+    ).toBeUndefined();
+    expect(metrics.recordTsaFailure).toHaveBeenCalledOnce();
+    expect(worm.putBatch).toHaveBeenCalledWith(1);
   });
 });

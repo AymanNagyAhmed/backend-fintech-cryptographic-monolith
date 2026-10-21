@@ -12,6 +12,7 @@ import {
   merkleRoot,
   verifyInclusion,
 } from '../../common/crypto/merkle.js';
+import { storedTsaToken } from './sth.service.js';
 
 export interface InclusionProofResult {
   eventId: string;
@@ -22,6 +23,8 @@ export interface InclusionProofResult {
   path: string[];
   /** True when path recomputes to the published STH root. */
   verified: boolean;
+  /** True only when that head's RFC 3161 token is stored. */
+  timeAnchored: boolean;
 }
 
 export interface ConsistencyProofResult {
@@ -32,6 +35,8 @@ export interface ConsistencyProofResult {
   path: string[];
   /** True when both sizes match published STHs and recomputed roots agree. */
   verified: boolean;
+  /** True only when both heads have a stored RFC 3161 token. */
+  timeAnchored: boolean;
 }
 
 @Injectable()
@@ -51,8 +56,7 @@ export class ProofsService {
     const sth = await this.prisma.treeHead.findFirst({
       orderBy: { treeSize: 'desc' },
     });
-    if (!sth)
-      throw new NotFoundException('no signed tree head published yet');
+    if (!sth) throw new NotFoundException('no signed tree head published yet');
 
     const leaves = await this.prisma.auditEvent.findMany({
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -88,6 +92,7 @@ export class ProofsService {
       leafHash: merkleHashToHex(leafHash),
       path: pathBuf.map(merkleHashToHex),
       verified,
+      timeAnchored: storedTsaToken(sth.tsaToken),
     };
   }
 
@@ -101,8 +106,7 @@ export class ProofsService {
   ): Promise<ConsistencyProofResult> {
     if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to < 1)
       throw new BadRequestException('from and to must be positive integers');
-    if (from > to)
-      throw new BadRequestException('from must be <= to');
+    if (from > to) throw new BadRequestException('from must be <= to');
 
     const fromSth = await this.prisma.treeHead.findUnique({
       where: { treeSize: from },
@@ -129,8 +133,7 @@ export class ProofsService {
     const fromRoot = merkleHashToHex(merkleRoot(digests.slice(0, from), true));
     const toRoot = merkleHashToHex(merkleRoot(digests, true));
     const path = consistencyProof(digests, from).map(merkleHashToHex);
-    const verified =
-      fromRoot === fromSth.rootHash && toRoot === toSth.rootHash;
+    const verified = fromRoot === fromSth.rootHash && toRoot === toSth.rootHash;
 
     return {
       from,
@@ -139,6 +142,8 @@ export class ProofsService {
       toRootHash: toSth.rootHash,
       path,
       verified,
+      timeAnchored:
+        storedTsaToken(fromSth.tsaToken) && storedTsaToken(toSth.tsaToken),
     };
   }
 }

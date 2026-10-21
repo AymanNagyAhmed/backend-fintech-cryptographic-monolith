@@ -21,4 +21,10 @@ export class InclusionProofDto {
 
   @ApiProperty({ description: 'Server recomputed proof against STH root' })
   verified!: boolean;
+
+  @ApiProperty({
+    description:
+      'True only when the signed tree head used for this proof has a stored RFC 3161 token',
+  })
+  timeAnchored!: boolean;
 }

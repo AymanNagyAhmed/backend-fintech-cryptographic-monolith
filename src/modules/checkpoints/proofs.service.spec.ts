@@ -1,6 +1,10 @@
 import { NotFoundException } from '@nestjs/common';
 import { ProofsService } from './proofs.service.js';
-import { auditLeafDigest, merkleHashToHex, merkleRoot } from '../../common/crypto/merkle.js';
+import {
+  auditLeafDigest,
+  merkleHashToHex,
+  merkleRoot,
+} from '../../common/crypto/merkle.js';
 
 describe('ProofsService.inclusionProofForEvent', () => {
   it('throws when the event is missing', async () => {
@@ -8,9 +12,9 @@ describe('ProofsService.inclusionProofForEvent', () => {
       auditEvent: { findFirst: vi.fn().mockResolvedValue(null) },
     };
     const service = new ProofsService(prisma as never);
-    await expect(service.inclusionProofForEvent('missing')).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      service.inclusionProofForEvent('missing'),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('returns a verified proof against the latest STH', async () => {
@@ -30,6 +34,7 @@ describe('ProofsService.inclusionProofForEvent', () => {
         findFirst: vi.fn().mockResolvedValue({
           treeSize: 3,
           rootHash,
+          tsaToken: null,
         }),
       },
     };
@@ -38,6 +43,7 @@ describe('ProofsService.inclusionProofForEvent', () => {
     expect(proof.leafIndex).toBe(1);
     expect(proof.treeSize).toBe(3);
     expect(proof.verified).toBe(true);
+    expect(proof.timeAnchored).toBe(false);
     expect(proof.path.length).toBeGreaterThan(0);
   });
 
@@ -52,9 +58,9 @@ describe('ProofsService.inclusionProofForEvent', () => {
       treeHead: {
         findUnique: vi.fn(async ({ where }: { where: { treeSize: number } }) =>
           where.treeSize === 3
-            ? { treeSize: 3, rootHash: fromRoot }
+            ? { treeSize: 3, rootHash: fromRoot, tsaToken: Buffer.from('a') }
             : where.treeSize === 7
-              ? { treeSize: 7, rootHash: toRoot }
+              ? { treeSize: 7, rootHash: toRoot, tsaToken: Buffer.from('b') }
               : null,
         ),
       },
@@ -63,6 +69,7 @@ describe('ProofsService.inclusionProofForEvent', () => {
     const service = new ProofsService(prisma as never);
     const proof = await service.consistencyProofBetween(3, 7);
     expect(proof.verified).toBe(true);
+    expect(proof.timeAnchored).toBe(true);
     expect(proof.path.length).toBeGreaterThan(0);
   });
 });
