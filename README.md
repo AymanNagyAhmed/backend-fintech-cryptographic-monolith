@@ -1,155 +1,101 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Backend monolith
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+NestJS API for the fintech modular monolith. PostgreSQL, Redis, and OpenBao run in Docker. The API runs on the host with Node 24.21.0.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+Commands below use `zsh` on WSL2 Ubuntu. Run them from the paths shown. `make` targets live in `modular_monolith/`, one directory above this folder.
 
-## Description
+## Prerequisites
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Install once per machine:
 
-## Project setup
-
-```bash
-$ npm install
+```zsh
+sudo apt-get update && sudo apt-get install -y git curl jq make openssl
 ```
 
-## Compile and run the project
+- **Node.js 24.21.0** via nvm (`.nvmrc` pins this version):
 
-```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+```zsh
+# https://github.com/nvm-sh/nvm
+nvm install 24.21.0
+nvm alias default 24.21.0
 ```
 
-## Run tests
+- **Docker Engine** with the Compose plugin, and your user in the `docker` group. Docker Desktop with WSL integration for this distro works too.
 
-```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+```zsh
+docker --version && docker compose version
 ```
 
-## Postman
+If `docker ps` fails with `permission denied` on `/var/run/docker.sock`, add your user to the `docker` group and open a new shell, or turn on WSL integration in Docker Desktop.
 
-`postman/fintech-monolith.postman_collection.json` is generated from `/v1/docs-json`; do not edit it by hand.
+Keep this repo on the Linux filesystem (`~/ai_projects/...`), not under `/mnt/c`.
 
-```bash
-npm run postman:build   # regenerate from the running API (override the URL with API=...)
-npm run postman:check   # every operation has operationId, tag, summary and is in the collection
-npm run postman:env     # write postman/environments/dev.local.postman_environment.json (git-ignored)
-npm run postman:test    # run the collection with Newman against the local API
+## Install
+
+From the monolith directory, copy both env files and replace every `change-me`. Passwords in `backend_monolith/.env` must match `modular_monolith/.env`: `APP_WRITER_PASSWORD`, `MIGRATOR_PASSWORD`, `REDIS_PASSWORD`, and `BAO_DEV_ROOT_TOKEN` (used as `BAO_TOKEN` until the signer token is created below).
+
+```zsh
+cd ~/ai_projects/fintec_cryptographic/modular_monolith
+cp .env.example .env
+cp backend_monolith/.env.example backend_monolith/.env
+# generate values, then paste them into both .env files where the names match
+openssl rand -base64 32
 ```
 
-- Per-request scripts live in `postman/scripts/<operationId>.(pre-request|test).js`.
-- Secrets (`b2bSecret` from `B2B_DEV_SECRET` in `.env`) only go into the local environment file.
-- `postman:test` registers a fresh user each run; registration is limited to 10 per hour per IP.
-- `newman` and `openapi-to-postmanv2` are dev-only tools. Their transitive dependencies make `npm audit` report high and critical findings; this is accepted because they are only used locally and in CI, never at runtime. Check runtime dependencies with `npm audit --omit=dev`.
+Install dependencies with the lockfile:
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+```zsh
+cd ~/ai_projects/fintec_cryptographic/modular_monolith/backend_monolith
+source ~/.nvm/nvm.sh && nvm use 24.21.0
+npm ci
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+Start Postgres, Redis, and OpenBao, then apply migrations and seed:
 
-## Observability
-
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
-
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
-
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-To add it to this project:
-
-```bash
-$ npm install @nestjs/observe
+```zsh
+cd ~/ai_projects/fintec_cryptographic/modular_monolith
+make up
+make migrate
+make seed
 ```
 
-Then follow the [setup guide](https://docs.nestjs.com/observability/overview) - it takes a single import and an app key.
+`make up` publishes Postgres on `127.0.0.1:5433`, Redis on `127.0.0.1:6379`, and OpenBao on `127.0.0.1:8200`. LocalStack (S3) stays off until `LOCALSTACK_AUTH_TOKEN` is set and `COMPOSE_PROFILES=s3` is added to `modular_monolith/.env`.
 
-The free plan needs no payment details and covers 300,000 events a month. You can also browse the [live demo](https://www.observe-demo.nestjs.com/dashboard) first - the whole dashboard over a busy service's data, with nothing to install.
+Create the Transit signing key, then a token that can only sign. Put the printed token in `BAO_TOKEN` in `backend_monolith/.env`. Keep the root token in `BAO_ADMIN_TOKEN`.
 
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observe](https://observe.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## Postman (A-B17)
-
-The collection is generated from the running OpenAPI document (`/v1/docs-json`), so it cannot drift from the code. Hand-written scripts live in `postman/scripts/` and are merged by the generator.
-
-```bash
-# Dev server must be up (make -C ../.. wait — or from modular_monolith: make dev)
-npm run postman:build          # regenerate postman/fintech-monolith.postman_collection.json
-npm run postman:check          # every operationId is in the collection
-npm run postman:env            # fill secrets into git-ignored postman/environments/dev.local.*
-make -C .. db-reset && make -C .. seed
-npm run postman:test           # Newman against the local API (--bail)
+```zsh
+cd ~/ai_projects/fintec_cryptographic/modular_monolith
+set -a && source .env && set +a
+docker compose exec -e BAO_ADDR=http://127.0.0.1:8200 -e BAO_TOKEN=$BAO_DEV_ROOT_TOKEN openbao \
+  sh -c 'bao secrets enable transit && bao write -f transit/keys/audit-signing type=ed25519'
+cd backend_monolith
+source ~/.nvm/nvm.sh && nvm use 24.21.0
+npm run openbao:setup-audit-signer
 ```
 
-Import `postman/fintech-monolith.postman_collection.json` and `postman/environments/dev.local.postman_environment.json` in the Postman app. Re-run `postman:env` after changing `.env`, and `postman:build` after changing an API. Never commit `*.local.*` or secret values in `dev.postman_environment.json`.
+OpenBao dev mode is in memory. After `make down` or a container restart, run the Transit command and `npm run openbao:setup-audit-signer` again.
 
-## License
+## Run
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+```zsh
+cd ~/ai_projects/fintec_cryptographic/modular_monolith
+make dev
+```
+
+The API listens on `http://localhost:3000`. Check it from another terminal:
+
+```zsh
+curl -sf http://localhost:3000/v1/health/live
+curl -sf http://localhost:3000/v1/health/ready
+```
+
+Stop the API with Ctrl+C. Stop the containers with:
+
+```zsh
+cd ~/ai_projects/fintec_cryptographic/modular_monolith
+make down
+```
+
+Follow container logs with `make logs`.
+
+To run the API inside Compose instead of on the host, set `COMPOSE_PROFILES=docker-backend` in `modular_monolith/.env` and run `make up`. The usual local path is `make up` plus `make dev`.
