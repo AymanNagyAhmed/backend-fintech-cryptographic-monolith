@@ -43,6 +43,30 @@ export const invalidTotp = () =>
     HttpStatus.UNPROCESSABLE_ENTITY,
   );
 
+export const withdrawalWalletNotFound = () =>
+  new DomainException(
+    'WALLET_NOT_FOUND',
+    'The wallet does not exist.',
+    HttpStatus.NOT_FOUND,
+    [{ field: 'walletId', issue: 'not found' }],
+  );
+
+export const withdrawalCurrencyMismatch = () =>
+  new DomainException(
+    'CURRENCY_MISMATCH',
+    'The wallet, the beneficiary and the amount must use the same currency.',
+    HttpStatus.UNPROCESSABLE_ENTITY,
+    [{ field: 'currency', issue: 'must match the wallet and the beneficiary' }],
+  );
+
+export const withdrawalWalletNotActive = (status: string) =>
+  new DomainException(
+    status === 'frozen' ? 'ACCOUNT_FROZEN' : 'ACCOUNT_CLOSED',
+    `The wallet is ${status}.`,
+    HttpStatus.UNPROCESSABLE_ENTITY,
+    [{ field: 'walletId', issue: status }],
+  );
+
 export const unsupportedCurrency = (currency: string) =>
   new DomainException(
     'UNSUPPORTED_CURRENCY',

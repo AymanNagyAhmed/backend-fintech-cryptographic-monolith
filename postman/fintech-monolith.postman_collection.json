@@ -36,6 +36,12 @@
           "  'auth.register': ['EMAIL_TAKEN'],",
           "  // Allow-list confirm without an enrolled TOTP in the Newman smoke env",
           "  'withdrawals.beneficiaryConfirm': ['INVALID_TOTP', 'TOTP_REQUIRED'],",
+          "  'withdrawals.create': [",
+          "    'INVALID_TOTP',",
+          "    'TOTP_REQUIRED',",
+          "    'BENEFICIARY_NOT_ACTIVE',",
+          "    'BENEFICIARY_NOT_FOUND',",
+          "  ],",
           "  // Privileged audit/compliance routes need MFA compliance user",
           "  'audit.verify': ['FORBIDDEN', 'UNAUTHORIZED'],",
           "  'audit.sthLatest': ['FORBIDDEN', 'UNAUTHORIZED', 'NOT_FOUND'],",
@@ -2341,6 +2347,141 @@
               ],
               "id": "f5a45fce-95fe-5e0d-ad4f-1ab9d1d235a2",
               "name": "TOTP_REQUIRED or INVALID_TOTP",
+              "status": "Unprocessable Entity (WebDAV) (RFC 4918)"
+            }
+          ]
+        },
+        {
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('operationId', 'withdrawals.create');",
+                  "// A payout needs a live TOTP and an active beneficiary. The smoke run has neither.",
+                  "const secret = pm.environment.get('totpSecret');",
+                  "const code = pm.environment.get('totpCode');",
+                  "if (!secret && !code) {",
+                  "  pm.variables.set('expectedErrorCode', 'INVALID_TOTP');",
+                  "  pm.variables.set('expectedErrorCodeAlt', 'BENEFICIARY_NOT_ACTIVE');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "id": "19d2c2a1-80eb-528e-a5c9-40391601805c",
+          "name": "Pay an active beneficiary. A fresh TOTP code is required on every call",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"walletId\": \"{{walletId}}\",\n  \"beneficiaryId\": \"{{beneficiaryId}}\",\n  \"amount\": \"{{amount}}\",\n  \"currency\": \"{{currency}}\",\n  \"totpCode\": \"{{totpCode}}\"\n}"
+            },
+            "description": "Pay an active beneficiary. A fresh TOTP code is required on every call",
+            "header": [
+              {
+                "description": {
+                  "content": "(Required) A new UUID per payout, reused on every retry of it. Same key + same body replays the first response.",
+                  "type": "text/plain"
+                },
+                "disabled": false,
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "name": "Pay an active beneficiary. A fresh TOTP code is required on every call",
+            "url": {
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "withdrawals"
+              ],
+              "raw": "{{baseUrl}}/withdrawals"
+            }
+          },
+          "response": [
+            {
+              "_postman_previewlanguage": "json",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "fca5afce-0b91-5036-a4de-1f1ce35e4f01",
+              "name": "201",
+              "status": "Created"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "b9df6ab8-379b-5ffd-acd9-8933e72ace15",
+              "name": "VALIDATION_FAILED or INVALID_IDEMPOTENCY_KEY",
+              "status": "Bad Request"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "256847f6-de23-54a1-a86a-0706e6505cc1",
+              "name": "Missing, invalid or expired access token",
+              "status": "Unauthorized"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "c4f6ccbf-749b-5643-a7e6-4e308720bd58",
+              "name": "WALLET_NOT_FOUND or BENEFICIARY_NOT_FOUND",
+              "status": "Not Found"
+            },
+            {
+              "_postman_previewlanguage": "json",
+              "code": 422,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "id": "539fa1bb-5ff3-51c2-aa8a-bf9168c09a2a",
+              "name": "INVALID_TOTP, BENEFICIARY_NOT_ACTIVE, INSUFFICIENT_FUNDS, CURRENCY_MISMATCH, ACCOUNT_FROZEN, ACCOUNT_CLOSED or IDEMPOTENCY_KEY_REUSED",
               "status": "Unprocessable Entity (WebDAV) (RFC 4918)"
             }
           ]
