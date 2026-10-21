@@ -63,6 +63,15 @@ export class UsersService {
     return this.prisma.user.findUnique({ where: { id }, omit: OMIT_HASH });
   }
 
+  /** Roles stored for this user, or null when the row is gone. */
+  async rolesOf(id: string): Promise<UserRole[] | null> {
+    const row = await this.prisma.user.findUnique({
+      where: { id },
+      select: { roles: true },
+    });
+    return row?.roles ?? null;
+  }
+
   findByEmail(email: string): Promise<UserView | null> {
     return this.prisma.user.findUnique({
       where: { email: normalizeEmail(email) },

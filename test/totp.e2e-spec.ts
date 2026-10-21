@@ -226,6 +226,33 @@ describe('TOTP (e2e)', () => {
       .expect(200);
   });
 
+  it('a demoted admin is denied the privileged route but can still list their wallets', async () => {
+    const { email, access } = await newUser();
+    await prisma.user.update({
+      where: { email },
+      data: { roles: ['user', 'admin'] },
+    });
+    const key = await enroll(access);
+    const strong = await http()
+      .post('/v1/auth/login')
+      .send({ email, password, totpCode: nextCode(key) })
+      .expect(200);
+    const token = strong.body.data.accessToken as string;
+    await http().get('/v1/totp-test/admin').set(bearer(token)).expect(200);
+
+    await prisma.user.update({
+      where: { email },
+      data: { roles: ['user'] },
+    });
+
+    const denied = await http()
+      .get('/v1/totp-test/admin')
+      .set(bearer(token))
+      .expect(403);
+    expect(denied.body.error.code).toBe('FORBIDDEN');
+    await http().get('/v1/wallets').set(bearer(token)).expect(200);
+  });
+
   it('a user without the role gets 403 even with TOTP', async () => {
     const { email, access } = await newUser();
     const key = await enroll(access);
