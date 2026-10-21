@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
 import { IdempotencyService } from '../../common/idempotency/idempotency.service.js';
@@ -13,6 +13,7 @@ import { Money } from '../../common/money/money.js';
 import type { EnvironmentVariables } from '../../config/env.validation.js';
 import type { Prisma, Transfer } from '../../generated/prisma/client.js';
 import { sumTransfersOutToday } from '../../generated/prisma/sql.js';
+import { MetricsService } from '../../common/metrics/metrics.service.js';
 import { getRequestId } from '../../common/request-context.js';
 import { AccountNotActiveException } from '../ledger/exceptions/account-not-active.exception.js';
 import { LedgerService } from '../ledger/ledger.service.js';
@@ -60,6 +61,7 @@ export class TransfersService {
     private readonly wallets: WalletsService,
     private readonly outbox: OutboxService,
     config: ConfigService<EnvironmentVariables, true>,
+    @Optional() private readonly metrics?: MetricsService,
   ) {
     this.dailyLimits = Object.fromEntries(
       CURRENCIES.map((c) => [
@@ -182,7 +184,9 @@ export class TransfersService {
     );
     const sentToday = Money.of(total ?? '0', amount.currency);
     const limit = this.dailyLimits[amount.currency];
-    if (sentToday.add(amount).gt(limit))
+    if (sentToday.add(amount).gt(limit)) {
+      this.metrics?.recordWithdrawalLimitBreach();
       throw dailyLimitExceeded(limit, sentToday);
+    }
   }
 }

@@ -1,5 +1,9 @@
+import type { ConfigService } from '@nestjs/config';
+import type { MetricsService } from '../../common/metrics/metrics.service.js';
+import type { EnvironmentVariables } from '../../config/env.validation.js';
 import { Money } from '../../common/money/money.js';
 import { evaluateWithdrawalPolicy } from './withdrawal-policy.js';
+import { WithdrawalPolicyService } from './withdrawal-policy.service.js';
 
 const limits = {
   dailyLimit: Money.of('1000.00', 'AED'),
@@ -22,6 +26,35 @@ describe('evaluateWithdrawalPolicy', () => {
         limits,
       ),
     ).toEqual({ action: 'allow' });
+  });
+
+  it('counts a withdrawal over the daily limit and not a self-approval', () => {
+    const recordWithdrawalLimitBreach = vi.fn();
+    const policy = new WithdrawalPolicyService(
+      {
+        get: (key: string) =>
+          key === 'WITHDRAWAL_LARGE_DELAY_HOURS' ? 12 : '1000.00',
+      } as unknown as ConfigService<EnvironmentVariables, true>,
+      { recordWithdrawalLimitBreach } as unknown as MetricsService,
+    );
+    expect(
+      policy.evaluate({
+        amount: '100.00',
+        currency: 'AED',
+        spentToday: '950.00',
+        requesterId: 'user-1',
+      }),
+    ).toEqual({ action: 'reject', reason: 'OVER_DAILY_LIMIT' });
+    expect(
+      policy.evaluate({
+        amount: '10.00',
+        currency: 'AED',
+        spentToday: '0.00',
+        requesterId: 'user-1',
+        approverId: 'user-1',
+      }),
+    ).toEqual({ action: 'reject', reason: 'SELF_APPROVAL' });
+    expect(recordWithdrawalLimitBreach).toHaveBeenCalledOnce();
   });
 
   it('rejects when daily limit would be exceeded', () => {

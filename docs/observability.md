@@ -12,6 +12,9 @@
 | `fintech_checkpoint_tree_size` / `fintech_checkpoint_age_seconds` | latest STH |
 | `fintech_tsa_failures_total` | TSA stamp failures |
 | `fintech_witness_alerts_total` | witness fork/truncation/rollback |
+| `fintech_signature_verify_failures_total` | `SignerService.verify` returned false |
+| `fintech_withdrawal_limit_breaches_total` | daily-limit rejection on a transfer or withdrawal |
+| `fintech_refresh_reuse_total` | refresh token presented again after use |
 
 ## Traces
 

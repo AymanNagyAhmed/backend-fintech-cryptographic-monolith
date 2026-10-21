@@ -1,5 +1,6 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { MetricsService } from '../../common/metrics/metrics.service.js';
 import type { EnvironmentVariables } from '../../config/env.validation.js';
 import { ALGORITHM_REGISTRY, isSigningAlg } from './algorithm-registry.js';
 import { SignerContractException } from './exceptions/signer-contract.exception.js';
@@ -70,6 +71,7 @@ export class SignerService implements Signer {
     @Inject(SIGNER_BACKEND) private readonly backend: Signer,
     private readonly signingKeys: SigningKeysService,
     config: ConfigService<EnvironmentVariables, true>,
+    @Optional() private readonly metrics?: MetricsService,
   ) {
     this.signingAlg = config.get('SIGNING_ALG', { infer: true });
   }
@@ -93,6 +95,16 @@ export class SignerService implements Signer {
   }
 
   async verify(
+    bytes: Uint8Array,
+    signature: SignatureEnvelope,
+    anchor?: AnchoredSignature,
+  ): Promise<boolean> {
+    const accepted = await this.signatureMatches(bytes, signature, anchor);
+    if (!accepted) this.metrics?.recordSignatureVerifyFailure();
+    return accepted;
+  }
+
+  private async signatureMatches(
     bytes: Uint8Array,
     signature: SignatureEnvelope,
     anchor?: AnchoredSignature,

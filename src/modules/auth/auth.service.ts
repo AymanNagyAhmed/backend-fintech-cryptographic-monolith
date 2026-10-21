@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import { MetricsService } from '../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { UserStatus } from '../../generated/prisma/client.js';
 import { UsersService, type UserView } from '../users/users.service.js';
@@ -52,6 +53,7 @@ export class AuthService {
     private readonly users: UsersService,
     private readonly tokens: TokenService,
     private readonly totp: TotpService,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   /** Self-registration always creates a plain `user`; other roles are granted by an admin. */
@@ -142,6 +144,7 @@ export class AuthService {
     });
 
     if (outcome.kind === 'reused') {
+      this.metrics?.recordRefreshReuse();
       this.logger.warn('Refresh token reuse detected; session family revoked');
       throw refreshTokenReused();
     }
