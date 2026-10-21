@@ -10,6 +10,8 @@ export const DEPOSIT_REJECTION_CODES = [
   'CURRENCY_MISMATCH',
   'ACCOUNT_FROZEN',
   'ACCOUNT_CLOSED',
+  'PROVIDER_MISMATCH',
+  'PROVIDER_UNAVAILABLE',
 ] as const;
 export type DepositRejectionCode = (typeof DEPOSIT_REJECTION_CODES)[number];
 

@@ -21,6 +21,7 @@ load_secret JWT_REFRESH_SECRET
 load_secret TOTP_ENCRYPTION_KEY
 load_secret API_CLIENT_ENCRYPTION_KEY
 load_secret WEBHOOK_SECRET_STRIPE
+load_secret STRIPE_SECRET_KEY
 load_secret BAO_TOKEN
 
 if [ -z "${REDIS_PASSWORD-}" ] && [ -f /run/secrets/redis_password ]; then

@@ -58,6 +58,14 @@ describe('env validation', () => {
     throw new Error('expected validation to fail');
   };
 
+  it('starts without a Stripe API key and refuses a short one', () => {
+    expect(validate(validEnv()).STRIPE_API_BASE).toBe('https://api.stripe.com');
+    expect(validate(validEnv()).STRIPE_SECRET_KEY).toBeUndefined();
+    expect(() =>
+      validate({ ...validEnv(), STRIPE_SECRET_KEY: 'short' }),
+    ).toThrow(/STRIPE_SECRET_KEY/);
+  });
+
   it('rejects the change-me placeholder and short secrets', () => {
     const msg = messageOf({
       ...validEnv(),
@@ -172,9 +180,9 @@ describe('env validation', () => {
       validate({ ...validEnv(), AUDIT_PARTITION_COUNT: '4' })
         .AUDIT_PARTITION_COUNT,
     ).toBe(4);
-    expect(
-      messageOf({ ...validEnv(), AUDIT_PARTITION_COUNT: '0' }),
-    ).toContain('- AUDIT_PARTITION_COUNT:');
+    expect(messageOf({ ...validEnv(), AUDIT_PARTITION_COUNT: '0' })).toContain(
+      '- AUDIT_PARTITION_COUNT:',
+    );
   });
 
   it('defaults the daily transfer limits and accepts amounts at the currency scale', () => {

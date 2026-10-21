@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { canonicalJsonSha256 } from '../../common/crypto/canonical-json.js';
@@ -26,6 +26,13 @@ import {
   depositsUnavailable,
   invalidWebhookEvent,
 } from './exceptions/webhook.exceptions.js';
+import {
+  PROVIDER_EVENTS,
+  ProviderEventUnavailable,
+  providerPaymentMatches,
+  type ProviderEvents,
+  type ProviderPayment,
+} from './provider-events.js';
 import { WebhookEventsService } from './webhook-events.service.js';
 import { PAYMENT_SUCCEEDED, redactWebhookPayload } from './webhook-payload.js';
 import type { WebhookProvider } from './webhook-providers.js';
@@ -64,6 +71,7 @@ export class PaymentsService {
     private readonly ledger: LedgerService,
     private readonly wallets: WalletsService,
     private readonly webhookEvents: WebhookEventsService,
+    @Inject(PROVIDER_EVENTS) private readonly providerEvents: ProviderEvents,
   ) {}
 
   /**
@@ -71,7 +79,9 @@ export class PaymentsService {
    * `timestamp` is its checked x-timestamp header. One runOnce per (provider, event id) (2.17):
    * the first delivery credits the wallet against the provider's clearing account, or stores
    * why it cannot; every redelivery, also a concurrent one, replays that receipt. The same
-   * event id with another body is 422 IDEMPOTENCY_KEY_REUSED.
+   * event id with another body is 422 IDEMPOTENCY_KEY_REUSED. A `payment.succeeded` is
+   * credited only when the provider's own event matches; a mismatch or a failed retrieve
+   * is stored as rejected, so a later retry cannot credit it.
    */
   async receive(
     provider: WebhookProvider,
@@ -137,7 +147,8 @@ export class PaymentsService {
       if (stored.requestHash !== requestHash) throw idempotencyKeyReused();
       return receiptOf(delivery, stored.outcome, stored.reason);
     }
-    const receipt = await this.process(tx, delivery);
+    const rejected = await this.providerRejection(delivery);
+    const receipt = rejected ?? (await this.process(tx, delivery));
     await this.webhookEvents.record(tx, {
       provider,
       eventId: event.id,
@@ -149,6 +160,46 @@ export class PaymentsService {
       signedAt: delivery.signedAt,
     });
     return receipt;
+  }
+
+  /**
+   * GET the provider event before any ledger write. A stored row already returned above,
+   * so a replay does not call out. `ProviderEventUnavailable` is committed as rejected;
+   * any other error rolls the idempotency claim back.
+   */
+  private async providerRejection(
+    delivery: Delivery,
+  ): Promise<WebhookReceiptDto | undefined> {
+    if (!delivery.deposit) return undefined;
+    let record: ProviderPayment;
+    try {
+      record = await this.providerEvents.load(
+        delivery.provider,
+        delivery.event.id,
+      );
+    } catch (e) {
+      if (!(e instanceof ProviderEventUnavailable)) throw e;
+      return receiptOf(delivery, 'rejected', {
+        code: 'PROVIDER_UNAVAILABLE',
+        message: 'The provider event could not be loaded.',
+      });
+    }
+    if (
+      providerPaymentMatches(
+        {
+          provider: delivery.provider,
+          eventId: delivery.event.id,
+          walletId: delivery.deposit.walletId,
+          amount: delivery.deposit.amount,
+        },
+        record,
+      )
+    )
+      return undefined;
+    return receiptOf(delivery, 'rejected', {
+      code: 'PROVIDER_MISMATCH',
+      message: 'The provider record does not match the signed callback.',
+    });
   }
 
   private async process(

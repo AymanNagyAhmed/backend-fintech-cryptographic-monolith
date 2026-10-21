@@ -246,6 +246,20 @@ export class EnvironmentVariables {
   @NotEquals(PLACEHOLDER)
   WEBHOOK_SECRET_STRIPE: string;
 
+  /**
+   * Stripe secret key for `GET /v1/events/:id`. Optional: when unset, a signed
+   * `payment.succeeded` is stored rejected and is not credited. Not the webhook HMAC secret.
+   */
+  @IsOptional()
+  @IsString()
+  @MinLength(32)
+  @NotEquals(PLACEHOLDER)
+  STRIPE_SECRET_KEY?: string;
+
+  @IsOptional()
+  @IsUrl(LOCAL_URL)
+  STRIPE_API_BASE: string = 'https://api.stripe.com';
+
   @IsUrl(LOCAL_URL)
   BAO_ADDR: string;
 
