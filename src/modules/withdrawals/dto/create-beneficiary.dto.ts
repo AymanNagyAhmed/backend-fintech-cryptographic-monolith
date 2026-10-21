@@ -15,7 +15,8 @@ export class CreateBeneficiaryDto {
 
   @ApiProperty({
     example: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
-    description: 'On-chain address or bank account reference',
+    description:
+      'Bech32 or base58check address, or a bank reference when network starts with bank_',
     maxLength: 256,
   })
   @IsString()
