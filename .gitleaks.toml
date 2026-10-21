@@ -1,0 +1,14 @@
+# Extends the default rules. The allowlist is only the known fixtures already in
+# history: webhook unit-test HMAC, the RFC 6238 TOTP test vector, and the Nest
+# scaffold CircleCI badge token. A new high-entropy key still fails the scan.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Known test fixtures and the removed Nest scaffold badge token"
+regexTarget = "secret"
+regexes = [
+  '''whsec_test_secret_0123456789abcdef''',
+  '''GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ''',
+  '''abc123def456''',
+]
