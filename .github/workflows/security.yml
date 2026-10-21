@@ -1,0 +1,100 @@
+# Secret scanners only (challenge 017). CBOM and image signing stay in A-C3.
+# Image tags match modular_monolith/.env.example: GITLEAKS_TAG, TRIVY_TAG, POSTGRES_IMAGE.
+name: security
+
+on:
+  pull_request:
+  push:
+    branches:
+      - dev
+      - main
+
+permissions:
+  contents: read
+
+env:
+  GITLEAKS_TAG: v8.30.1
+  TRIVY_TAG: 0.75.0
+  POSTGRES_IMAGE: postgres:18.6-alpine3.24
+
+jobs:
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Scan git history for secrets
+        run: |
+          docker run --rm -v "${GITHUB_WORKSPACE}:/repo" \
+            "ghcr.io/gitleaks/gitleaks:${GITLEAKS_TAG}" \
+            detect --source /repo --no-banner --redact --exit-code 1
+
+  image-secrets:
+    name: trivy image secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Start Postgres
+        run: |
+          # Publish on all interfaces so the build container can reach Postgres through host-gateway.
+          docker run -d --name ci-postgres \
+            -p 5432:5432 \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=ci \
+            -e POSTGRES_DB=fintech \
+            "${POSTGRES_IMAGE}"
+          ready=0
+          for _ in $(seq 1 30); do
+            if docker exec ci-postgres pg_isready -U postgres -d fintech; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          test "${ready}" = 1
+          docker exec -i ci-postgres psql -U postgres -d fintech -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE migrator LOGIN CREATEDB PASSWORD 'ci';
+          CREATE ROLE app_writer LOGIN PASSWORD 'ci';
+          CREATE ROLE auditor_ro LOGIN PASSWORD 'ci';
+          GRANT CONNECT, CREATE, TEMPORARY ON DATABASE fintech TO migrator;
+          GRANT CONNECT, TEMPORARY ON DATABASE fintech TO app_writer;
+          GRANT CONNECT ON DATABASE fintech TO auditor_ro;
+          REVOKE ALL ON SCHEMA public FROM PUBLIC;
+          GRANT USAGE, CREATE ON SCHEMA public TO migrator;
+          SQL
+      - name: Apply migrations
+        env:
+          MIGRATOR_DATABASE_URL: postgresql://migrator:ci@127.0.0.1:5432/fintech
+        run: |
+          npm ci
+          npx prisma migrate deploy
+      - name: Build fintech-backend:local
+        run: |
+          docker build \
+            --add-host=host.docker.internal:host-gateway \
+            --build-arg MIGRATOR_DATABASE_URL=postgresql://migrator:ci@host.docker.internal:5432/fintech \
+            -t fintech-backend:local \
+            -f Dockerfile .
+      - name: Scan the image for secrets
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            "aquasec/trivy:${TRIVY_TAG}" image \
+            --scanners secret \
+            --exit-code 1 \
+            --disable-telemetry \
+            --skip-version-check \
+            fintech-backend:local
