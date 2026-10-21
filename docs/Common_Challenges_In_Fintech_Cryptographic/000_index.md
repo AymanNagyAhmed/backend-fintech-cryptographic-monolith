@@ -1,6 +1,6 @@
 # Fintech cryptographic web app challenges (October 2026)
 
-One file per problem. Each file opens with a diagram of the impact and the recommended solution, then explains the problem, the impact, and the control to build.
+One file per problem. Each file opens with a diagram of the impact and the recommended solution, then explains the problem, the impact, and the control to build. The Code section opens with a diagram of the path this backend takes, then quotes that code. Where the control is not in this repository, the section says so and quotes the closest check that is.
 
 Short catalog: [common_challenges_in_fintech_cryptographic_web_apps_in_Oct_2026.md](../../../../common_challenges_in_fintech_cryptographic_web_apps_in_Oct_2026.md).
 

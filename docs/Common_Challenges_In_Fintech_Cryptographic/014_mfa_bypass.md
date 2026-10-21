@@ -28,6 +28,15 @@ TOTP is HMAC-based on `node:crypto` (6 digits, 30 seconds, one step of drift). T
 
 ## Code
 
+```mermaid
+flowchart TD
+  wd["POST /v1/withdrawals"] --> totp{"TotpService.verify"}
+  totp -->|false| err["INVALID_TOTP, balance unchanged"]
+  totp -->|true| ben["requireActive"]
+  ben --> post["ledger.post"]
+  transfer["POST /v1/transfers"] --> noTotp["This route does not ask for TOTP"]
+```
+
 `POST /v1/withdrawals` (`withdrawals.create`) calls `TotpService.verify` before `LedgerService.post`. Confirm and the activation delay still gate a new address. Internal `transfers.create` does not ask for TOTP. A code that `verify` already claimed returns false, the handler throws `INVALID_TOTP`, and the wallet balance stays put.
 
 ```typescript
@@ -37,12 +46,17 @@ const beneficiary = await this.beneficiaries.requireActive(
   userId,
   dto.beneficiaryId,
 );
-// ... ownership and currency checks, then:
+```
+
+```typescript
 await this.ledger.post(
   {
     ref,
     entries: [
-      { accountId: wallet.ledgerAccountId, amount: amount.negate().toString() },
+      {
+        accountId: wallet.ledgerAccountId,
+        amount: amount.negate().toString(),
+      },
       { accountId: clearing.id, amount: amount.toString() },
     ],
   },

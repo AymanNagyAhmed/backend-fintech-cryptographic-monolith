@@ -27,6 +27,20 @@ A valid login is not permission to act on every row. Object-level failures (IDOR
 
 ## Code
 
+```mermaid
+flowchart TD
+  req["Request"] --> jwt["JwtAuthGuard proves identity"]
+  jwt --> roles{"route requires a privileged role?"}
+  roles -->|no| token["Use the roles on the token"]
+  roles -->|yes| db["Load auth.users.roles"]
+  db --> still{"row still has that role?"}
+  still -->|no| deny["403"]
+  still -->|yes| mfa{"session passed TOTP?"}
+  mfa -->|no| need["mfaRequired"]
+  wallet["Wallet id"] --> owned{"ownerUserId matches?"}
+  owned -->|no| nf["404"]
+```
+
 `RolesGuard` keeps the access token as the proof of identity. When `@Roles()` intersects `approver`, `compliance`, or `admin`, it loads `auth.users.roles` for that user and decides from the row. A missing user or a role that is no longer on the row is 403. A route that only requires `user` still uses the token. TOTP is still required when every granted role is privileged.
 
 ```typescript

@@ -25,3 +25,40 @@ flowchart LR
 ## Recommended solution
 
 Draw secrets only from Node `crypto.randomBytes` and `crypto.randomUUID`. Do not seed that generator. Replay nonces are those values, stored in Redis with AOF so they survive a restart, with a TTL longer than the signature time window. Idempotency keys are supplied by the client and stored in PostgreSQL in the same transaction as the ledger entries, so a Redis flush cannot pay twice. Tests that need determinism inject a fake random source at the boundary. Production code does not.
+
+## Code
+
+```mermaid
+flowchart TD
+  refresh["Refresh token"] --> rb32["randomBytes of 32 bytes"]
+  family["Session family id"] --> uuid["randomUUID"]
+  nonce["Request nonce"] --> rb16["randomBytes of 16 bytes"]
+  rb16 --> setnx["Redis SET NX with TTL"]
+  setnx -->|OK| first["First use accepted"]
+  setnx -->|already set| replay["Replay rejected"]
+  setnx -->|Redis error| closed["Fail closed"]
+```
+
+A refresh token is 256 bits from `randomBytes`. A new login session family id is `randomUUID()`. A request nonce defaults to `randomBytes(16)`. `NonceStore.claim` stores it with Redis `SET NX` and fails closed when Redis errors. AES-GCM IVs in `SecretBox.seal` are `randomBytes(12)`.
+
+```typescript
+newRefreshToken(): { token: string; hash: string } {
+  const token = randomBytes(REFRESH_TOKEN_BYTES).toString('base64url');
+  return { token, hash: this.hashRefreshToken(token) };
+}
+```
+
+```typescript
+const nonce = input.nonce ?? randomBytes(16).toString('base64url');
+```
+
+```typescript
+const res = await this.redis.set(
+  `${NONCE_KEY_PREFIX}${clientId}:${nonce}`,
+  '1',
+  'EX',
+  ttlSec,
+  'NX',
+);
+return res === 'OK';
+```

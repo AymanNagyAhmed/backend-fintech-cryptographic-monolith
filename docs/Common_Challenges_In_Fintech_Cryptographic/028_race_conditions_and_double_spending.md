@@ -24,3 +24,39 @@ Two requests can each read a balance of 500, each decide that a withdrawal of 50
 ## Recommended solution
 
 Ledger entries are the source of truth. A balance is not changed with a bare `UPDATE balance = balance + x`. The cached balance moves only inside the same transaction that inserts the matching debit and credit, after `SELECT ... FOR UPDATE` on the account rows. Isolation is Read Committed plus those locks, or Serializable with a retry on serialization failure. The proof already required by the build plan: 100 parallel withdrawals of 10 from a balance of 500 end with exactly 50 successes and a balance that is never negative.
+
+## Code
+
+```mermaid
+flowchart TD
+  post["postIn"] --> lock["SELECT accounts ORDER BY id FOR UPDATE"]
+  lock --> funds{"wallet would go negative?"}
+  funds -->|yes| insuff["insufficientFunds"]
+  funds -->|no| entries["Insert the ledger entries"]
+  entries --> cache["Set the cached balance"]
+  cache --> commit["Caller transaction commits all of it"]
+```
+
+`lockAccountsForUpdate` locks the account rows in id order. `postIn` runs that query, inserts the entries, then sets each cached balance, all on the caller's transaction. A wallet account with `allow_negative` false throws `insufficientFunds` before those writes.
+
+```sql
+SELECT id, currency, kind, allow_negative, balance, status
+FROM ledger.accounts
+WHERE id = ANY($1::uuid[])
+ORDER BY id
+FOR UPDATE
+```
+
+```typescript
+const locked = await tx.$queryRawTyped(
+  lockAccountsForUpdate(posting.accountIds),
+);
+```
+
+```typescript
+for (const b of balances)
+  await tx.account.update({
+    where: { id: b.accountId },
+    data: { balance: b.balance.toFixed() },
+  });
+```

@@ -24,3 +24,28 @@ The EU Digital Operational Resilience Act, applicable from January 2025, treats 
 ## Recommended solution
 
 Keep a list of critical ICT providers (identity, payments, OpenBao or KMS, TSA, object storage) and an owner for each. Payouts fail closed when the signer or the sanctions screen is down. Reads can degrade. Timeouts are explicit. The stage-2 gateway's circuit breaker (`opossum`) stops calling a dead vendor. Run the database backup-and-restore drill on a schedule. Write the incident down, including start time, so the regulatory notification clock has a real start. Do not stand up an exportable signing key as a workaround.
+
+## Code
+
+```mermaid
+flowchart TD
+  bao["OpenBao call"] --> t1{"answers within 5 seconds?"}
+  t1 -->|no| kse["KeyStoreException, no signature"]
+  stripe["Stripe retrieve"] --> t2{"answers within 5 seconds?"}
+  t2 -->|no| rej["rejected PROVIDER_UNAVAILABLE, no ledger post"]
+  t2 -->|yes| match["Compare the provider record"]
+```
+
+OpenBao calls use `AbortSignal.timeout` (`TIMEOUT_MS` is 5000). A timeout or a network error throws `KeyStoreException`. It does not return a signature and it does not fall back to an exportable key. Stripe retrieve uses the same 5 second timeout and becomes `PROVIDER_UNAVAILABLE`, which stores `rejected` and does not post. `opossum` is not a dependency. `scripts/db-backup-restore-test.sh` restores a backup and runs `npm run job:reconcile`. There is no sanctions client to fail closed.
+
+```typescript
+signal: AbortSignal.timeout(TIMEOUT_MS),
+```
+
+```typescript
+} catch (e) {
+  throw new KeyStoreException(`OpenBao ${method} ${path} failed`, {
+    cause: e,
+  });
+}
+```

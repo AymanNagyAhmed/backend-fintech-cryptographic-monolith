@@ -24,3 +24,30 @@ flowchart LR
 ## Recommended solution
 
 Custody and audit signatures are produced inside OpenBao Transit or the KMS, not in the page. There is no web client and no `crypto.subtle` path: a JavaScript fallback for the signature scheme is the failure this control avoids. Canonical JSON for audit payloads matches the server's RFC 8785 bytes.
+
+## Code
+
+```mermaid
+flowchart TD
+  page["Browser crypto.subtle"] -.-> none["No web client in this repository"]
+  sign["SignerService.sign"] --> backend["OpenBao or KMS adapter"]
+  backend --> alg{"envelope.alg equals SIGNING_ALG?"}
+  alg -->|no| throw["SignerContractException"]
+  alg -->|yes| ok["Return the envelope"]
+  local["LocalTestSigner"] --> prod{"NODE_ENV is production?"}
+  prod -->|yes| refuse["Throw"]
+```
+
+A search of this repository outside `node_modules` finds no `crypto.subtle` and no web client. `SignerService.sign` sends the bytes to the configured adapter and refuses an envelope whose `alg` is not `SIGNING_ALG`. `LocalTestSigner` throws when `nodeEnv` is `production`. OpenBao and AWS KMS adapters are the ones `signer-backend.provider` builds for `openbao` and `aws-kms`.
+
+```typescript
+if (envelope.alg !== this.signingAlg)
+  throw new SignerContractException(
+    `signed with ${envelope.alg}, configured SIGNING_ALG is ${this.signingAlg}`,
+  );
+```
+
+```typescript
+if (nodeEnv === 'production')
+  throw new Error('LocalTestSigner is refused in production');
+```

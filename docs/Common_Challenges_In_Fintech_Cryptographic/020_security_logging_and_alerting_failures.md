@@ -27,6 +27,18 @@ Business actions write an outbox row in the same transaction, and a worker appen
 
 ## Code
 
+```mermaid
+flowchart TD
+  badSig["verify returns false"] --> c1["signature verify failures counter"]
+  limit["Daily-limit rejection"] --> c2["withdrawal limit breaches counter"]
+  reuse["Refresh outcome reused"] --> c3["refresh reuse counter"]
+  c1 --> prom["Prometheus increase over 15 minutes"]
+  c2 --> prom
+  c3 --> prom
+  prom --> page["warning, critical for refresh reuse"]
+  thrown["Key-store error"] --> nocount["Not counted"]
+```
+
 `MetricsService` counts three signals. `SignerService.verify` increments `fintech_signature_verify_failures_total` on every false return, and a key-store error still throws without a count. `TransfersService` increments `fintech_withdrawal_limit_breaches_total` where it throws the daily-limit rejection. `WithdrawalPolicyService.evaluate` increments the same counter when `evaluateWithdrawalPolicy` rejects for `OVER_DAILY_LIMIT`. `AuthService.refresh` increments `fintech_refresh_reuse_total` next to the existing warn when the outcome is `reused`.
 
 `docker/prometheus/alerts/security.yml` is loaded with `audit.yml` and `clock.yml` by the `alerts/*.yml` rule file. Verify failures and limit breaches are warning. Refresh reuse is critical. Each rule is `increase(...[15m]) > 0`.
@@ -46,22 +58,33 @@ recordRefreshReuse(): void {
 ```
 
 ```typescript
-const accepted = await this.signatureMatches(bytes, signature, anchor);
-if (!accepted) this.metrics?.recordSignatureVerifyFailure();
-return accepted;
+const outcome = await this.signatureOutcome(bytes, signature, anchor);
+if (outcome.ok) return true;
+this.metrics?.recordSignatureVerifyFailure();
+await this.recordRejection(outcome);
+return false;
 ```
 
 ```yaml
 - alert: SignatureVerifyFailures
   expr: increase(fintech_signature_verify_failures_total[15m]) > 0
+  for: 0m
   labels:
     severity: warning
+  annotations:
+    summary: A signature verification failed recently
 - alert: WithdrawalLimitBreaches
   expr: increase(fintech_withdrawal_limit_breaches_total[15m]) > 0
+  for: 0m
   labels:
     severity: warning
+  annotations:
+    summary: A transfer or withdrawal was rejected for the daily limit
 - alert: RefreshTokenReuse
   expr: increase(fintech_refresh_reuse_total[15m]) > 0
+  for: 0m
   labels:
     severity: critical
+  annotations:
+    summary: A refresh token was presented again after use
 ```

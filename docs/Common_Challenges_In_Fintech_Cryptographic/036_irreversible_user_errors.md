@@ -27,6 +27,18 @@ Custody withdrawals require an allow-listed destination, show the canonical addr
 
 ## Code
 
+```mermaid
+flowchart TD
+  create["BeneficiariesService.create"] --> trim["Trim address and network"]
+  trim --> bank{"network starts with bank_?"}
+  bank -->|yes| len{"length from 1 to 256?"}
+  bank -->|no| shape{"bech32, bech32m, or base58check?"}
+  len -->|no| bad["INVALID_ADDRESS, no row"]
+  shape -->|no| bad
+  len -->|yes| insert["Insert the row"]
+  shape -->|yes| insert
+```
+
 `BeneficiariesService.create` trims the address and rejects it with `INVALID_ADDRESS` (422) before insert. `bank_*` networks keep the 1–256 length check. Any other network must be bech32, bech32m, or base58check. A string that is neither encoding is rejected. The checksum uses `node:crypto` only (`address-checksum.ts`).
 
 ```typescript

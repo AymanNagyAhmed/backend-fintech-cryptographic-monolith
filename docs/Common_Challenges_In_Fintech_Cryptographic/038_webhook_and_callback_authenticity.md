@@ -27,12 +27,31 @@ A public URL that credits a wallet because the JSON says `deposit succeeded` tru
 
 ## Code
 
+```mermaid
+flowchart TD
+  post["POST /v1/webhooks/provider"] --> mac{"HMAC over timestamp and raw body?"}
+  mac -->|no| err["Error before any balance change"]
+  mac -->|yes| get["GET the provider event"]
+  get -->|unavailable| rej1["rejected PROVIDER_UNAVAILABLE"]
+  get -->|record| cmp{"provider, event, destination, and amount match?"}
+  cmp -->|no| rej2["rejected PROVIDER_MISMATCH"]
+  cmp -->|yes| once["Credit once, event id is the idempotency key"]
+  rej1 --> stay["A replay cannot credit"]
+  rej2 --> stay
+```
+
 `StripeEventClient` loads the event with `GET {STRIPE_API_BASE}/v1/events/:id` and `Authorization: Bearer ${STRIPE_SECRET_KEY}` before `process` writes ledger entries. The webhook HMAC secret stays `WEBHOOK_SECRET_STRIPE`. A missing key, a failed call, or a body that is not a usable event throws `ProviderEventUnavailable`.
 
 `PaymentsService` compares that record with the signed callback. Provider, event id, and destination must be the same. Amounts compare as money, so `250` and `250.00` match. A mismatch is stored as `rejected` with `PROVIDER_MISMATCH`. A failed retrieve is stored as `rejected` with `PROVIDER_UNAVAILABLE`. Neither writes a ledger entry. The idempotency key is that event id, so a later delivery replays the rejection and cannot credit. A matching record credits once, including a replay. A stored row is returned without calling Stripe again.
 
 ```typescript
-record = await this.providerEvents.load(delivery.provider, delivery.event.id);
+record = await this.providerEvents.load(
+  delivery.provider,
+  delivery.event.id,
+);
+```
+
+```typescript
 if (
   providerPaymentMatches(
     {
@@ -53,9 +72,14 @@ return receiptOf(delivery, 'rejected', {
 
 ```typescript
 const url = `${this.baseUrl}/v1/events/${encodeURIComponent(eventId)}`;
-const res = await this.fetchFn(url, {
-  method: 'GET',
-  headers: { Authorization: `Bearer ${this.secret}` },
-  signal: AbortSignal.timeout(TIMEOUT_MS),
-});
+let res: Response;
+try {
+  res = await this.fetchFn(url, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${this.secret}` },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+} catch {
+  throw new ProviderEventUnavailable();
+}
 ```

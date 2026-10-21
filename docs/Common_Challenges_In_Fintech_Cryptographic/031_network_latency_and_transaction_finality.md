@@ -24,3 +24,28 @@ Blockchain confirmations and bank settlement take longer than an HTTP request sh
 ## Recommended solution
 
 Write the intent in the database first, with an explicit status (`pending`, `confirmed`, `failed`), and return that status. A worker watches confirmations or bank callbacks off the request path. Credit or release the hold only when the product's finality rule is met (enough confirmations, or a settled bank status), and do it through the idempotent ledger path. The client renders the stored status. It does not invent a success from a spinner that finished. Timeouts on the provider call are bounded so one slow bank does not hold a database transaction open.
+
+## Code
+
+```mermaid
+flowchart TD
+  wd["Withdrawal request"] --> tx["ledger.post in that transaction"]
+  tx --> done["Return status COMPLETED"]
+  hook["payment.succeeded webhook"] --> match{"provider record matches?"}
+  match -->|yes| credit["Credit in that same request"]
+  match -->|no| rej["Store rejected, no credit"]
+  worker["pending or confirmed worker"] -.-> absent["Not implemented"]
+```
+
+A withdrawal and a matched webhook do not use `pending`, `confirmed`, or `failed`. `WithdrawalsService.execute` posts in the request transaction and returns `status: 'COMPLETED'`. A `payment.succeeded` webhook credits in that same request after the provider record matches, or stores `rejected` when it does not. There is no worker that waits for chain confirmations. Provider calls are bounded: Stripe retrieve aborts after 5 seconds and the receipt is `PROVIDER_UNAVAILABLE`.
+
+```typescript
+return {
+  id: ref,
+  walletId: wallet.id,
+  beneficiaryId: beneficiary.id,
+  amount: amount.toString(),
+  currency: amount.currency,
+  status: 'COMPLETED',
+};
+```

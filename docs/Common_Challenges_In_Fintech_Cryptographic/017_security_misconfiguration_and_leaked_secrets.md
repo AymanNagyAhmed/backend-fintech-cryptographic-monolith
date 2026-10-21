@@ -28,6 +28,18 @@ The defaults that make local development easy are the ones that leak in producti
 
 ## Code
 
+```mermaid
+flowchart TD
+  boot["Process start"] --> env{"secret missing, short, or change-me?"}
+  env -->|yes| refuse["Validation refuses to boot"]
+  pr["Pull request"] --> leaks["gitleaks on full history"]
+  pr --> image["Build fintech-backend local"]
+  image --> trivy["Trivy secret scan, exit code 1"]
+  leaks -->|finding| fail["Workflow fails"]
+  trivy -->|finding| fail
+  audit["Audit payload"] --> redact["Secret-shaped fields removed before the hash"]
+```
+
 `.github/workflows/security.yml` runs two jobs. Tags are the pins in `modular_monolith/.env.example`: `GITLEAKS_TAG` `v8.30.1` and `TRIVY_TAG` `0.75.0`. A finding fails that job, so the workflow fails. CBOM and image signing stay in the rest of A-C3.
 
 `gitleaks` checks out the full history and runs `gitleaks detect` on it. `.gitleaks.toml` extends the default rules and allowlists three fixtures already in history: the webhook unit-test HMAC, the RFC 6238 TOTP test vector, and the removed Nest scaffold badge token. A later commit that adds a different high-entropy key fails this job. The key used to prove that stays on a branch that is not merged.
@@ -44,9 +56,16 @@ docker run --rm -v "${GITHUB_WORKSPACE}:/repo" \
 docker build \
   --add-host=host.docker.internal:host-gateway \
   --build-arg MIGRATOR_DATABASE_URL=postgresql://migrator:ci@host.docker.internal:5432/fintech \
-  -t fintech-backend:local -f Dockerfile .
+  -t fintech-backend:local \
+  -f Dockerfile .
+```
+
+```bash
 docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
   "aquasec/trivy:${TRIVY_TAG}" image \
-  --scanners secret --exit-code 1 --disable-telemetry --skip-version-check \
+  --scanners secret \
+  --exit-code 1 \
+  --disable-telemetry \
+  --skip-version-check \
   fintech-backend:local
 ```

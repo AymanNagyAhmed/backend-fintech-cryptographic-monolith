@@ -28,6 +28,17 @@ Order audit and money events by a per-partition sequence number, not by timestam
 
 ## Code
 
+```mermaid
+flowchart TD
+  build["CheckpointerService.build"] --> insert["Insert the signed tree head"]
+  insert --> stamp["TsaService.stampTreeHead"]
+  stamp -->|error| empty["tsa_token stays empty"]
+  empty --> move["Chain still moves, timeAnchored false"]
+  empty --> skip["latestAnchored skips the row"]
+  stamp -->|token stored| anchored["timeAnchored true"]
+  anchored --> latest["latestAnchored can return that head"]
+```
+
 `CheckpointerService.build` inserts the signed tree head, then calls `TsaService.stampTreeHead`. A TSA error increments `fintech_tsa_failures_total` and leaves the row in place with `tsa_token` empty, so the chain still moves. `SthService.latest` returns that head with `timeAnchored: false`. `timeAnchored` becomes true only after `stampTreeHead` stores a non-empty token. Inclusion proofs still use the latest signed head. `SthReceiptsService.pushLatest` writes a receipt only for `latestAnchored()`, the newest head whose token is already stored.
 
 ```typescript
@@ -41,7 +52,9 @@ async latestAnchored(): Promise<TreeHeadDto> {
     throw new NotFoundException('no time-anchored tree head published yet');
   return toDto(row);
 }
+```
 
+```typescript
 export function storedTsaToken(token: Uint8Array | null | undefined): boolean {
   return token != null && token.length > 0;
 }

@@ -24,3 +24,38 @@ Phishing and account opening now use generated faces, documents, and voice. Chai
 ## Recommended solution
 
 Gate money movement on a KYC vendor decision that includes liveness, and on sanctions screening, not on a document image alone. The first withdrawal above the limit requires TOTP step-up and the custody delay. MFA reset and limit changes are audited admin actions with four eyes. Train support to verify a callback to a number already on the account. Rate limits and device signals still apply. The model that scores risk is an input to a human or to a hard rule. It is not the only approver.
+
+## Code
+
+```mermaid
+flowchart TD
+  login["Login"] --> enabled{"TOTP enabled?"}
+  enabled -->|no| session["Create the session"]
+  enabled -->|yes| code{"code verifies?"}
+  code -->|no| deny["invalidTotp"]
+  code -->|yes| session
+  wd["Withdrawal"] --> step{"a new TOTP code verifies?"}
+  step -->|no| stop["INVALID_TOTP, no ledger post"]
+  step -->|yes| post["requireActive, then ledger.post"]
+  priv["Privileged route"] --> mfa{"session passed TOTP?"}
+  mfa -->|no| need["mfaRequired"]
+```
+
+There is no KYC vendor call, no sanctions screen, and no MFA-reset route in this repository. The step-up that is implemented is TOTP. Login verifies the code when TOTP is enabled, before a session is created. `POST /v1/withdrawals` verifies a new code before `requireActive` and `ledger.post`. `RolesGuard` refuses a privileged role when the session did not pass TOTP.
+
+```typescript
+const mfa = await this.totp.isEnabled(user.id);
+if (mfa) {
+  if (!dto.totpCode) throw totpRequired();
+  if (!(await this.totp.verify(user.id, dto.totpCode))) throw invalidTotp();
+}
+```
+
+```typescript
+if (!(await this.totp.verify(userId, dto.totpCode))) throw invalidTotp();
+```
+
+```typescript
+if (!user.mfa && granted.every((role) => PRIVILEGED_ROLES.includes(role)))
+  throw mfaRequired();
+```

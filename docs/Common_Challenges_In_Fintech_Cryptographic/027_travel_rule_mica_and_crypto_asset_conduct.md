@@ -24,3 +24,22 @@ A crypto transfer above the local threshold has to carry originator and benefici
 ## Recommended solution
 
 Collect and validate originator and beneficiary fields before a qualifying crypto withdrawal is signed. Send them to the counterparty through the channel the license names, and store a reference on the audit log, with PII encrypted under the subject key from [023. Data privacy versus immutability](023_data_privacy_vs_immutability.md). Screen those names under [025. Cross-border legal restrictions](025_cross_border_legal_restrictions.md). Do not sign the on-chain transaction until that record exists. Publish the disclosures the license requires in the product. Do not add them only in a PDF nobody's flow reads.
+
+## Code
+
+```mermaid
+flowchart TD
+  wd["Withdrawal"] --> active{"requireActive for this user?"}
+  active -->|no| stop["Reject before the ledger"]
+  active -->|yes| post["ledger.post"]
+  travel["Originator and Travel Rule fields"] -.-> none["Not collected"]
+```
+
+Originator name, beneficiary name, and a Travel Rule reference are not fields on the withdrawal. The payout still refuses a destination that is not an active allow-listed `Beneficiary` for that user. That row stores label, currency, address, and network. It does not store the originator.
+
+```typescript
+const beneficiary = await this.beneficiaries.requireActive(
+  userId,
+  dto.beneficiaryId,
+);
+```
