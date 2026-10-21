@@ -7,6 +7,7 @@ import {
 import { ErasureCompletedV1Schema } from './schemas/erasure.v1.js';
 import { PaymentWebhookAcceptedV1Schema } from './schemas/payment.v1.js';
 import { BeneficiaryConfirmedV1Schema } from './schemas/beneficiary.v1.js';
+import { CryptoSignatureRejectedV1Schema } from './schemas/crypto.v1.js';
 import { CustodySignV1Schema } from './schemas/custody.v1.js';
 import { TransferCompletedV1Schema } from './schemas/transfer.v1.js';
 import { WalletCreatedV1Schema } from './schemas/wallet.v1.js';
@@ -25,6 +26,7 @@ export const AUDIT_EVENT_SCHEMAS = {
   'audit.access': { 1: AuditAccessV1Schema },
   'erasure.completed': { 1: ErasureCompletedV1Schema },
   'beneficiary.confirmed': { 1: BeneficiaryConfirmedV1Schema },
+  'crypto.signature.rejected': { 1: CryptoSignatureRejectedV1Schema },
   'custody.sign': { 1: CustodySignV1Schema },
 } as const;
 
@@ -39,6 +41,7 @@ export type AuditEvent =
   | z.infer<typeof AuditAccessV1Schema>
   | z.infer<typeof ErasureCompletedV1Schema>
   | z.infer<typeof BeneficiaryConfirmedV1Schema>
+  | z.infer<typeof CryptoSignatureRejectedV1Schema>
   | z.infer<typeof CustodySignV1Schema>;
 
 export function schemaOf(

@@ -1,7 +1,11 @@
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MetricsService } from '../../common/metrics/metrics.service.js';
+import { getRequestId } from '../../common/request-context.js';
 import type { EnvironmentVariables } from '../../config/env.validation.js';
+import { PrismaService } from '../../database/prisma.service.js';
+import type { SignatureRejectionReason } from '../../shared-kernel/audit/schemas/crypto.v1.js';
+import { OutboxService } from '../outbox/outbox.service.js';
 import { ALGORITHM_REGISTRY, isSigningAlg } from './algorithm-registry.js';
 import { SignerContractException } from './exceptions/signer-contract.exception.js';
 import { isKeyRef, parseKeyId } from './key-id.js';
@@ -12,6 +16,12 @@ import {
   type SigningAlg,
 } from './signer.js';
 import { SigningKeysService } from './signing-keys.service.js';
+
+/** Opaque actor for a verify that has no user. The signature itself is not stored. */
+const SIGNER_ACTOR = 'signer';
+
+/** Chainer partition keys are this charset, at most 64 characters. */
+const PARTITION_KEY = /^[A-Za-z0-9_.:-]{1,64}$/;
 
 /** Decoded bytes of a canonical standard-base64 signature with the algorithm's length, else null. */
 function signatureBytes(alg: SigningAlg, sig: unknown): Buffer | null {
@@ -61,10 +71,13 @@ function wellFormed(value: unknown): SignatureEnvelope | null {
  * and verifies as false. Verification accepts any registered algorithm so a config switch
  * keeps older artifacts verifiable. A key with `revokedAt` set in `crypto.signing_keys`
  * is refused on a live check. A stored RFC 3161 token still verifies an artifact whose
- * own timestamp is strictly before that `revokedAt`.
+ * own timestamp is strictly before that `revokedAt`. Each false return is counted and
+ * enqueued as `crypto.signature.rejected` in its own transaction. A key-store error
+ * still throws and is not audited as a rejection.
  */
 @Injectable()
 export class SignerService implements Signer {
+  private readonly logger = new Logger(SignerService.name);
   private readonly signingAlg: SigningAlg;
 
   constructor(
@@ -72,6 +85,8 @@ export class SignerService implements Signer {
     private readonly signingKeys: SigningKeysService,
     config: ConfigService<EnvironmentVariables, true>,
     @Optional() private readonly metrics?: MetricsService,
+    @Optional() private readonly prisma?: PrismaService,
+    @Optional() private readonly outbox?: OutboxService,
   ) {
     this.signingAlg = config.get('SIGNING_ALG', { infer: true });
   }
@@ -99,24 +114,71 @@ export class SignerService implements Signer {
     signature: SignatureEnvelope,
     anchor?: AnchoredSignature,
   ): Promise<boolean> {
-    const accepted = await this.signatureMatches(bytes, signature, anchor);
-    if (!accepted) this.metrics?.recordSignatureVerifyFailure();
-    return accepted;
+    const outcome = await this.signatureOutcome(bytes, signature, anchor);
+    if (outcome.ok) return true;
+    this.metrics?.recordSignatureVerifyFailure();
+    await this.recordRejection(outcome);
+    return false;
   }
 
-  private async signatureMatches(
+  private async signatureOutcome(
     bytes: Uint8Array,
     signature: SignatureEnvelope,
     anchor?: AnchoredSignature,
-  ): Promise<boolean> {
+  ): Promise<{ ok: true } | SignatureRejection> {
     const envelope = wellFormed(signature);
-    if (!envelope) return false;
+    if (!envelope) return { ok: false, reason: 'malformed' };
     const published = await this.signingKeys.find(envelope.keyId);
     if (
       published?.revokedAt != null &&
       !coveredBeforeRevocation(published.revokedAt, anchor)
     )
-      return false;
-    return (await this.backend.verify(bytes, envelope)) === true;
+      return { ok: false, reason: 'revoked', keyId: envelope.keyId };
+    if ((await this.backend.verify(bytes, envelope)) === true)
+      return { ok: true };
+    return {
+      ok: false,
+      reason: published ? 'mismatch' : 'unknown_key',
+      keyId: envelope.keyId,
+    };
   }
+
+  /**
+   * Own short transaction on auth.outbox, like other cross-cutting audit events.
+   * A failed write is logged and does not change the false result.
+   */
+  private async recordRejection(rejection: SignatureRejection): Promise<void> {
+    const prisma = this.prisma;
+    const outbox = this.outbox;
+    if (!prisma || !outbox) return;
+    const requestId = getRequestId();
+    const keyId = rejection.keyId;
+    try {
+      await prisma.withTx((tx) =>
+        outbox.enqueue(tx, 'auth', {
+          type: 'crypto.signature.rejected',
+          schemaVersion: 1,
+          occurredAt: new Date().toISOString(),
+          actor: { subjectRef: SIGNER_ACTOR },
+          ...(requestId !== undefined ? { requestId } : {}),
+          ...(keyId !== undefined && PARTITION_KEY.test(keyId)
+            ? { partitionKey: keyId }
+            : {}),
+          reason: rejection.reason,
+          ...(keyId !== undefined ? { keyId } : {}),
+        }),
+      );
+    } catch (err) {
+      this.logger.warn(
+        { err, reason: rejection.reason },
+        'Could not enqueue crypto.signature.rejected',
+      );
+    }
+  }
+}
+
+interface SignatureRejection {
+  ok: false;
+  reason: SignatureRejectionReason;
+  keyId?: string;
 }

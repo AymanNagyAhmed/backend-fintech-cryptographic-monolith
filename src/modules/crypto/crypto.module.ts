@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { OutboxModule } from '../outbox/outbox.module.js';
 import { AuditKeysController } from './audit-keys.controller.js';
 import {
   KeyRotationService,
@@ -10,6 +11,7 @@ import { SigningKeysService } from './signing-keys.service.js';
 
 /** Signing through KMS / OpenBao Transit (2.6, 2.7); owns the crypto schema. */
 @Module({
+  imports: [OutboxModule],
   controllers: [AuditKeysController],
   providers: [
     signerBackendProvider,
