@@ -19,6 +19,7 @@ import {
   sthContentHash,
   type SthPayload,
 } from '../src/modules/checkpoints/sth-payload.js';
+import { storedTsaToken } from '../src/modules/checkpoints/sth.service.js';
 import type { TsaService } from '../src/modules/checkpoints/tsa.service.js';
 import { WitnessService } from '../src/modules/checkpoints/witness.service.js';
 import type { WormService } from '../src/modules/checkpoints/worm.service.js';
@@ -131,6 +132,7 @@ describe.skipIf(!dockerAvailable())('Audit tamper suite', () => {
     alg: string;
     keyId: string;
     signature: string;
+    tsaToken: Uint8Array | null;
   }) =>
     signer.verify(
       sthCanonicalBytes({
@@ -140,6 +142,7 @@ describe.skipIf(!dockerAvailable())('Audit tamper suite', () => {
         previousSthHash: head.previousSthHash,
       }),
       { alg: head.alg as 'ed25519', keyId: head.keyId, sig: head.signature },
+      { signedAt: head.timestamp, anchored: storedTsaToken(head.tsaToken) },
     );
 
   const append = async (from: number, to: number) => {
@@ -365,11 +368,18 @@ describe.skipIf(!dockerAvailable())('Audit tamper suite', () => {
       previousSthHash: stored.previousSthHash,
     };
     expect(
-      await signer.verify(sthCanonicalBytes(storedPayload), {
-        alg: 'ed25519',
-        keyId: stored.keyId,
-        sig: stored.signature,
-      }),
+      await signer.verify(
+        sthCanonicalBytes(storedPayload),
+        {
+          alg: 'ed25519',
+          keyId: stored.keyId,
+          sig: stored.signature,
+        },
+        {
+          signedAt: stored.timestamp,
+          anchored: storedTsaToken(stored.tsaToken),
+        },
+      ),
     ).toBe(false);
 
     // The honest head (size 3, untouched) still verifies against the same key
@@ -383,6 +393,7 @@ describe.skipIf(!dockerAvailable())('Audit tamper suite', () => {
           previousSthHash: first.previousSthHash,
         }),
         { alg: 'ed25519', keyId: first.keyId, sig: first.signature },
+        { signedAt: first.timestamp, anchored: storedTsaToken(first.tsaToken) },
       ),
     ).toBe(true);
     expect(sthContentHash(forgedPayload)).not.toBe(

@@ -21,6 +21,29 @@ function signatureBytes(alg: SigningAlg, sig: unknown): Buffer | null {
   return bytes.length >= min && bytes.length <= max ? bytes : null;
 }
 
+/**
+ * Time evidence for one signed artifact. `signedAt` is the timestamp inside that
+ * artifact (the STH payload), not the server clock. `anchored` is true only when
+ * that artifact's RFC 3161 token is already stored.
+ */
+export interface AnchoredSignature {
+  signedAt: Date;
+  anchored: boolean;
+}
+
+/** A revoked key still covers an artifact signed strictly before `revokedAt` once the token is stored. */
+function coveredBeforeRevocation(
+  revokedAtIso: string,
+  anchor: AnchoredSignature | undefined,
+): boolean {
+  if (anchor?.anchored !== true || !(anchor.signedAt instanceof Date))
+    return false;
+  const signedAt = anchor.signedAt.getTime();
+  const revokedAt = new Date(revokedAtIso).getTime();
+  if (Number.isNaN(signedAt) || Number.isNaN(revokedAt)) return false;
+  return signedAt < revokedAt;
+}
+
 /** Only the three envelope fields, so nothing else an adapter returns is ever stored. */
 function wellFormed(value: unknown): SignatureEnvelope | null {
   if (typeof value !== 'object' || value === null) return null;
@@ -35,8 +58,9 @@ function wellFormed(value: unknown): SignatureEnvelope | null {
  * adapter and holds every adapter to the same contract: a new signature must use SIGNING_ALG
  * and name the requested key with a version; a malformed signature never reaches an adapter
  * and verifies as false. Verification accepts any registered algorithm so a config switch
- * keeps older artifacts verifiable. A key with `revokedAt` set in `crypto.signing_keys` is
- * refused (A-B8.6); accepting pre-revocation material via an external time anchor is A-B10.
+ * keeps older artifacts verifiable. A key with `revokedAt` set in `crypto.signing_keys`
+ * is refused on a live check. A stored RFC 3161 token still verifies an artifact whose
+ * own timestamp is strictly before that `revokedAt`.
  */
 @Injectable()
 export class SignerService implements Signer {
@@ -71,11 +95,16 @@ export class SignerService implements Signer {
   async verify(
     bytes: Uint8Array,
     signature: SignatureEnvelope,
+    anchor?: AnchoredSignature,
   ): Promise<boolean> {
     const envelope = wellFormed(signature);
     if (!envelope) return false;
     const published = await this.signingKeys.find(envelope.keyId);
-    if (published?.revokedAt != null) return false;
+    if (
+      published?.revokedAt != null &&
+      !coveredBeforeRevocation(published.revokedAt, anchor)
+    )
+      return false;
     return (await this.backend.verify(bytes, envelope)) === true;
   }
 }
