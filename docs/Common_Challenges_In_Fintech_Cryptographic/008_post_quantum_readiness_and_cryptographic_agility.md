@@ -6,7 +6,7 @@ flowchart LR
     rsaOnly["Only RSA or ECC, algorithm unnamed"] --> harvest[Recorded key exchange decrypted later]
   end
   subgraph solutionPath [Recommended solution]
-    hybrid[Hybrid TLS X25519 plus ML-KEM] --> configAlg["ML-DSA selected by config, alg stored on the artifact"]
+    hybrid[Hybrid TLS on the prod Nginx profile] --> localEd["Local signing stays ed25519; alg stored on the artifact"]
   end
 ```
 
@@ -23,4 +23,4 @@ A cryptographically relevant quantum computer has not broken production fintech 
 
 ## Recommended solution
 
-Keep a cryptographic bill of materials. Every signature stores `alg` and `keyId`. ML-DSA is selected by configuration, not by a scattered code change. Edge TLS is hybrid: X25519 together with ML-KEM. Classical signatures stay in place until verifiers for the post-quantum algorithm are deployed, so old artifacts keep verifying under the algorithm they name.
+Keep a cryptographic bill of materials. Every signature stores `alg` and `keyId`, and verification accepts the algorithm the artifact names, so old checkpoints stay verifiable. Local signing stays ed25519: OpenBao 2.7 Transit cannot sign ML-DSA, and the signer must not claim a signature that key store did not create. ML-DSA stays in the registry for a later key store. Edge TLS on the production Nginx profile is hybrid, X25519 together with ML-KEM. The local dev server does not serve that profile.

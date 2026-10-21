@@ -6,7 +6,7 @@ flowchart LR
     localState[Browser balance treated as truth] --> drift[Signed payload and the ledger disagree]
   end
   subgraph solutionPath [Recommended solution]
-    serverLedger[Ledger is the source of truth] --> canonical[Client signs the canonical body the server will post]
+    serverLedger[Ledger is the source of truth] --> canonical[Client signs the canonical HTTP request]
   end
 ```
 
@@ -23,4 +23,4 @@ The browser holds a cached balance, a drafted transfer, and sometimes a signatur
 
 ## Recommended solution
 
-The ledger is the source of truth. Clients refetch after every money call and render the envelope's data, not a locally incremented number. When the client signs, it signs the RFC 8785 form of the same body the server will verify and post. The server rejects a mismatch. Idempotency keys tie a retry to that body. Wallet renames and other non-money edits are scoped to the owner and return 404 for a stale id the caller does not own, so a client cannot "fix" state by writing someone else's row.
+The ledger is the source of truth. Clients refetch after every money call and render the server's data, not a locally incremented number. A B2B client signs the canonical HTTP request from [005. Signature and nonce mismatches](005_signature_and_nonce_mismatches.md): method, path, timestamp, nonce, and the raw-body hash. The server rejects a mismatch. Stored audit payloads use RFC 8785. Idempotency keys tie a retry to that body. Wallet renames and other non-money edits are scoped to the owner and return 404 for an id the caller does not own.

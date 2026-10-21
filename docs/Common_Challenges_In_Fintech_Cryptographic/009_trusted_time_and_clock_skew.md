@@ -6,7 +6,7 @@ flowchart LR
     localClock[Each host trusts its own clock] --> skew["Fresh signatures look expired, old ones look fresh"]
   end
   subgraph solutionPath [Recommended solution]
-    seq[Order by sequence number] --> tsa[RFC 3161 token on every signed tree head]
+    seq[Order by sequence number] --> tsa["Time-anchored only after the RFC 3161 token is stored"]
     tsa --> chrony[chrony plus a monitored clock offset]
   end
 ```
@@ -24,4 +24,4 @@ Signature expiry, one-time codes, certificate validity, idempotency windows, and
 
 ## Recommended solution
 
-Order audit and money events by a per-partition sequence number, not by timestamp alone. Put an RFC 3161 timestamp token on every signed tree head (FreeTSA in dev, a qualified TSA in production). Run chrony on the hosts and alert when the clock offset exceeds the threshold already scraped for this platform. Nonce and signature windows are wider than measured skew and shorter than a useful replay.
+Order audit and money events by a per-partition sequence number, not by timestamp alone. Put an RFC 3161 timestamp token on every signed tree head (FreeTSA in dev, a qualified TSA in production). If the TSA call fails, store the signed head and retry the stamp off the transfer request, so the chain keeps moving. A head counts as time-anchored only after that token is stored. Run chrony on the hosts and alert when the clock offset exceeds the threshold already scraped for this platform. Nonce and signature windows are wider than measured skew and shorter than a useful replay.

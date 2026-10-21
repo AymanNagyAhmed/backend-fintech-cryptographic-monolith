@@ -6,7 +6,7 @@ flowchart LR
     subtleCrypto[Page depends on one browser's Web Crypto] --> blocked[Mobile or an old browser cannot sign or verify]
   end
   subgraph solutionPath [Recommended solution]
-    serverSign[Custody signatures stay in OpenBao or the KMS] --> detect[Feature-detect any browser crypto and offer a server path]
+    serverSign[Custody signatures stay in OpenBao or the KMS] --> noPage[No browser signing path]
   end
 ```
 
@@ -23,4 +23,4 @@ flowchart LR
 
 ## Recommended solution
 
-Custody and audit signatures are produced inside OpenBao Transit or the KMS, not in the page, so browser differences do not hold the private key. Any browser-side verify or user-presence check feature-detects `crypto.subtle` and, when it is missing, uses the server verify endpoint rather than a JavaScript reimplementation of the signature scheme. Canonical JSON for anything the client signs matches the server's RFC 8785 bytes. Exercise the flow on a current mobile browser and a current desktop browser before calling it done.
+Custody and audit signatures are produced inside OpenBao Transit or the KMS, not in the page. There is no web client and no `crypto.subtle` path: a JavaScript fallback for the signature scheme is the failure this control avoids. Canonical JSON for audit payloads matches the server's RFC 8785 bytes.

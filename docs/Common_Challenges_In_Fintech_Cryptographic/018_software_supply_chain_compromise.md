@@ -24,4 +24,4 @@ The application trusts its build. A malicious release of a transitive package, a
 
 ## Recommended solution
 
-`.npmrc` sets `save-exact=true` and `engine-strict=true`. Install with `npm ci` from the committed lockfile. Pin Docker image tags. Treat `install` and `postinstall` scripts as a review item, and check license, age, and audit before adding a package. The approval UI for custody is ours: it renders the canonical payload. Vendor screens are not the thing an operator signs. Signing stays inside OpenBao or the KMS, so a compromised app process still cannot export the key.
+`.npmrc` sets `save-exact=true` and `engine-strict=true`. Install with `npm ci` from the committed lockfile. Pin Docker image tags. Treat `install` and `postinstall` scripts as a review item, and check license, age, and audit before adding a package. Custody signing uses the canonical payload the server built, inside OpenBao or the KMS, so a compromised process cannot export the key and a tampered screen cannot swap the bytes. When an approver screen exists, it shows that same payload.

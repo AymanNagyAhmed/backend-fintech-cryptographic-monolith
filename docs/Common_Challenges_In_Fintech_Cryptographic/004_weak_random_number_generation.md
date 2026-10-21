@@ -24,4 +24,4 @@ flowchart LR
 
 ## Recommended solution
 
-Draw secrets only from Node `crypto.randomBytes` and `crypto.randomUUID`. Do not seed that generator. Idempotency keys and nonces are those values, stored in Redis with AOF so they survive a restart, with a TTL longer than the signature time window. Tests that need determinism inject a fake random source at the boundary. Production code does not.
+Draw secrets only from Node `crypto.randomBytes` and `crypto.randomUUID`. Do not seed that generator. Replay nonces are those values, stored in Redis with AOF so they survive a restart, with a TTL longer than the signature time window. Idempotency keys are supplied by the client and stored in PostgreSQL in the same transaction as the ledger entries, so a Redis flush cannot pay twice. Tests that need determinism inject a fake random source at the boundary. Production code does not.
