@@ -1,5 +1,6 @@
 import { ForbiddenException, type ExecutionContext } from '@nestjs/common';
 import type { Reflector } from '@nestjs/core';
+import type { UsersService } from '../../users/users.service.js';
 import type { AuthenticatedRequest, AuthUser, Role } from '../auth.types.js';
 import { ROLES_KEY } from '../decorators/roles.decorator.js';
 import { RolesGuard } from './roles.guard.js';
@@ -12,11 +13,17 @@ const context = (req: Partial<AuthenticatedRequest>) =>
     switchToHttp: () => ({ getRequest: () => req }),
   }) as unknown as ExecutionContext;
 
-const guardFor = (required?: Role[]) =>
-  new RolesGuard({
-    getAllAndOverride: (key: string) =>
-      key === ROLES_KEY ? required : undefined,
-  } as unknown as Reflector);
+const guardFor = (required?: Role[], stored?: Role[] | null) => {
+  const rolesOf = vi.fn(async () => stored ?? null);
+  const guard = new RolesGuard(
+    {
+      getAllAndOverride: (key: string) =>
+        key === ROLES_KEY ? required : undefined,
+    } as unknown as Reflector,
+    { rolesOf } as unknown as UsersService,
+  );
+  return { guard, rolesOf };
+};
 
 const userWith = (roles: Role[], mfa: boolean): AuthUser => ({
   id: 'u1',
@@ -26,45 +33,63 @@ const userWith = (roles: Role[], mfa: boolean): AuthUser => ({
 });
 
 describe('RolesGuard', () => {
-  it('allows any authenticated user when no role is required', () => {
-    expect(
-      guardFor().canActivate(context({ user: userWith(['user'], false) })),
-    ).toBe(true);
+  it('allows any authenticated user when no role is required', async () => {
+    const { guard, rolesOf } = guardFor();
+    await expect(
+      guard.canActivate(context({ user: userWith(['user'], false) })),
+    ).resolves.toBe(true);
+    expect(rolesOf).not.toHaveBeenCalled();
   });
 
-  it('allows a user with one of the required roles', () => {
-    expect(
-      guardFor(['admin', 'user']).canActivate(
-        context({ user: userWith(['user'], false) }),
-      ),
-    ).toBe(true);
+  it('uses the token when the route only requires user', async () => {
+    const { guard, rolesOf } = guardFor(['user'], ['admin']);
+    await expect(
+      guard.canActivate(context({ user: userWith(['user'], false) })),
+    ).resolves.toBe(true);
+    expect(rolesOf).not.toHaveBeenCalled();
   });
 
-  it('forbids a user without the role, and a request without a user', () => {
-    const guard = guardFor(['admin']);
-    expect(() =>
+  it('allows a privileged route from the database role, not the token', async () => {
+    const { guard, rolesOf } = guardFor(['admin'], ['user', 'admin']);
+    await expect(
       guard.canActivate(context({ user: userWith(['user'], true) })),
-    ).toThrow(ForbiddenException);
-    expect(() => guard.canActivate(context({}))).toThrow(ForbiddenException);
+    ).resolves.toBe(true);
+    expect(rolesOf).toHaveBeenCalledWith('u1');
   });
 
-  it('a privileged role needs a session that passed TOTP', () => {
-    const guard = guardFor(['admin']);
-    expect(() =>
+  it('forbids a demoted user and a missing user on a privileged route', async () => {
+    const demoted = guardFor(['admin'], ['user']);
+    await expect(
+      demoted.guard.canActivate(context({ user: userWith(['admin'], true) })),
+    ).rejects.toThrow(ForbiddenException);
+
+    const missing = guardFor(['admin'], null);
+    await expect(
+      missing.guard.canActivate(context({ user: userWith(['admin'], true) })),
+    ).rejects.toThrow(ForbiddenException);
+
+    const { guard } = guardFor(['admin'], ['admin']);
+    await expect(guard.canActivate(context({}))).rejects.toThrow(
+      ForbiddenException,
+    );
+  });
+
+  it('a privileged role needs a session that passed TOTP', async () => {
+    const guard = guardFor(['admin'], ['user', 'admin']).guard;
+    await expect(
       guard.canActivate(context({ user: userWith(['user', 'admin'], false) })),
-    ).toThrow(
+    ).rejects.toThrow(
       expect.objectContaining({ code: 'MFA_REQUIRED', statusCode: 403 }),
     );
-    expect(
+    await expect(
       guard.canActivate(context({ user: userWith(['user', 'admin'], true) })),
-    ).toBe(true);
+    ).resolves.toBe(true);
   });
 
-  it('a non-privileged role that matches is enough without TOTP', () => {
-    expect(
-      guardFor(['user', 'approver']).canActivate(
-        context({ user: userWith(['user', 'approver'], false) }),
-      ),
-    ).toBe(true);
+  it('a non-privileged role that matches is enough without TOTP', async () => {
+    const { guard } = guardFor(['user', 'approver'], ['user', 'approver']);
+    await expect(
+      guard.canActivate(context({ user: userWith(['user'], false) })),
+    ).resolves.toBe(true);
   });
 });
