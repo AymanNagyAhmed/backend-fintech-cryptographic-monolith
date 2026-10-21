@@ -49,3 +49,11 @@ export const unsupportedCurrency = (currency: string) =>
     `Currency ${currency} is not supported.`,
     HttpStatus.UNPROCESSABLE_ENTITY,
   );
+
+export const invalidAddress = () =>
+  new DomainException(
+    'INVALID_ADDRESS',
+    'The address failed a bech32 or base58 checksum, or it is not an address for this network.',
+    HttpStatus.UNPROCESSABLE_ENTITY,
+    [{ field: 'address', issue: 'checksum or encoding' }],
+  );

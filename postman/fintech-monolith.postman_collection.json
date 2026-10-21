@@ -2133,7 +2133,7 @@
                 }
               ],
               "id": "d2de0069-2323-5e6b-a898-1362dd7e444c",
-              "name": "UNSUPPORTED_CURRENCY or VALIDATION_FAILED",
+              "name": "UNSUPPORTED_CURRENCY, INVALID_ADDRESS, or VALIDATION_FAILED",
               "status": "Unprocessable Entity (WebDAV) (RFC 4918)"
             }
           ]

@@ -7,6 +7,7 @@ import { PrismaService } from '../../database/prisma.service.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { TotpService } from '../auth/totp/totp.service.js';
 import { OutboxService } from '../outbox/outbox.service.js';
+import { addressChecksumOk } from './address-checksum.js';
 import type { BeneficiaryDto } from './dto/beneficiary.dto.js';
 import type { CreateBeneficiaryDto } from './dto/create-beneficiary.dto.js';
 import {
@@ -14,6 +15,7 @@ import {
   beneficiaryNotActive,
   beneficiaryNotFound,
   beneficiaryNotPending,
+  invalidAddress,
   invalidTotp,
   totpRequired,
   unsupportedCurrency,
@@ -53,14 +55,17 @@ export class BeneficiariesService {
     dto: CreateBeneficiaryDto,
   ): Promise<BeneficiaryDto> {
     if (!isCurrency(dto.currency)) throw unsupportedCurrency(dto.currency);
+    const address = dto.address.trim();
+    const network = dto.network.trim().toLowerCase();
+    if (!addressChecksumOk(network, address)) throw invalidAddress();
     try {
       const row = await this.prisma.beneficiary.create({
         data: {
           ownerUserId,
           label: dto.label.trim(),
           currency: dto.currency,
-          address: dto.address.trim(),
-          network: dto.network.trim().toLowerCase(),
+          address,
+          network,
           status: 'pending_confirmation',
         },
       });

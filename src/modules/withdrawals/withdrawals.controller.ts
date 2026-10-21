@@ -47,13 +47,10 @@ export class WithdrawalsController {
       'Add a withdrawal destination to the allow-list (inactive until 2FA confirm + delay)',
   })
   @ApiOkEnvelope({ $ref: getSchemaPath(BeneficiaryDto) }, HttpStatus.CREATED)
-  @ApiFailureResponse(
-    HttpStatus.CONFLICT,
-    'BENEFICIARY_DUPLICATE',
-  )
+  @ApiFailureResponse(HttpStatus.CONFLICT, 'BENEFICIARY_DUPLICATE')
   @ApiFailureResponse(
     HttpStatus.UNPROCESSABLE_ENTITY,
-    'UNSUPPORTED_CURRENCY or VALIDATION_FAILED',
+    'UNSUPPORTED_CURRENCY, INVALID_ADDRESS, or VALIDATION_FAILED',
   )
   async create(
     @CurrentUser() user: AuthUser,
@@ -88,10 +85,7 @@ export class WithdrawalsController {
   })
   @ApiOkEnvelope({ $ref: getSchemaPath(BeneficiaryDto) })
   @ApiFailureResponse(HttpStatus.NOT_FOUND, 'BENEFICIARY_NOT_FOUND')
-  @ApiFailureResponse(
-    HttpStatus.CONFLICT,
-    'BENEFICIARY_NOT_PENDING',
-  )
+  @ApiFailureResponse(HttpStatus.CONFLICT, 'BENEFICIARY_NOT_PENDING')
   @ApiFailureResponse(
     HttpStatus.UNPROCESSABLE_ENTITY,
     'TOTP_REQUIRED or INVALID_TOTP',
