@@ -1,5 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { generateKeyPairSync, sign, verify } from 'node:crypto';
+import type { MetricsService } from '../../common/metrics/metrics.service.js';
 import type { EnvironmentVariables } from '../../config/env.validation.js';
 import { LocalTestSigner } from './adapters/local-test.signer.js';
 import { SignerContractException } from './exceptions/signer-contract.exception.js';
@@ -317,6 +318,29 @@ describe('SignerService', () => {
     const envelope = await active.sign(message, 'audit-signing');
     expect(await active.verify(message, envelope)).toBe(true);
     expect(backend.verify).toHaveBeenCalled();
+  });
+
+  it('counts every false verify and not a true one or a key-store error', async () => {
+    const recordSignatureVerifyFailure = vi.fn();
+    const counted = new SignerService(
+      backend,
+      keysStub(),
+      configOf('ed25519'),
+      { recordSignatureVerifyFailure } as unknown as MetricsService,
+    );
+    const envelope = await counted.sign(message, 'audit-signing');
+    expect(await counted.verify(message, envelope)).toBe(true);
+    expect(recordSignatureVerifyFailure).not.toHaveBeenCalled();
+    expect(
+      await counted.verify(new TextEncoder().encode('tree_size=41'), envelope),
+    ).toBe(false);
+    expect(await counted.verify(message, { ...envelope, sig: '' })).toBe(false);
+    expect(recordSignatureVerifyFailure).toHaveBeenCalledTimes(2);
+    backend.verify.mockRejectedValueOnce(new Error('OpenBao unreachable'));
+    await expect(counted.verify(message, envelope)).rejects.toThrow(
+      'OpenBao unreachable',
+    );
+    expect(recordSignatureVerifyFailure).toHaveBeenCalledTimes(2);
   });
 
   it('lets catalog lookup failures propagate instead of verifying false', async () => {

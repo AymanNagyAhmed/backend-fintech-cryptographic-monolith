@@ -1,5 +1,6 @@
 import type { ConfigService } from '@nestjs/config';
 import type { IdempotencyService } from '../../common/idempotency/idempotency.service.js';
+import type { MetricsService } from '../../common/metrics/metrics.service.js';
 import type { EnvironmentVariables } from '../../config/env.validation.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { AccountNotActiveException } from '../ledger/exceptions/account-not-active.exception.js';
@@ -40,6 +41,7 @@ describe('TransfersService.create', () => {
   let findOwned: ReturnType<typeof vi.fn>;
   let findById: ReturnType<typeof vi.fn>;
   let enqueue: ReturnType<typeof vi.fn>;
+  let recordWithdrawalLimitBreach: ReturnType<typeof vi.fn>;
   let service: TransfersService;
 
   beforeEach(() => {
@@ -60,6 +62,7 @@ describe('TransfersService.create', () => {
     findOwned = vi.fn().mockResolvedValue(wallet('w-from'));
     findById = vi.fn().mockResolvedValue(wallet('w-to'));
     enqueue = vi.fn().mockResolvedValue('out-1');
+    recordWithdrawalLimitBreach = vi.fn();
     tx.transfer.create.mockImplementation(({ data }: { data: object }) => ({
       id: 't1',
       createdAt: new Date('2026-10-14T18:30:00Z'),
@@ -76,6 +79,7 @@ describe('TransfersService.create', () => {
         EnvironmentVariables,
         true
       >,
+      { recordWithdrawalLimitBreach } as unknown as MetricsService,
     );
   });
 
@@ -274,6 +278,7 @@ describe('TransfersService.create', () => {
       await expect(service.create(userId, 'k', dto)).resolves.toMatchObject({
         statusCode: 201,
       });
+      expect(recordWithdrawalLimitBreach).not.toHaveBeenCalled();
     });
 
     it('answers 422 DAILY_LIMIT_EXCEEDED one cent over and writes no transfer row', async () => {
@@ -289,6 +294,7 @@ describe('TransfersService.create', () => {
         ],
       });
       expect(tx.transfer.create).not.toHaveBeenCalled();
+      expect(recordWithdrawalLimitBreach).toHaveBeenCalledOnce();
     });
 
     it('never reports a negative amount left after the limit was lowered', async () => {

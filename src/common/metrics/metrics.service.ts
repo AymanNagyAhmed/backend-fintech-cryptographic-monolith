@@ -25,6 +25,9 @@ export class MetricsService implements OnModuleInit {
   private readonly chainerSkippedLock: Counter;
   private readonly tsaFailures: Counter;
   private readonly witnessAlerts: Counter;
+  private readonly signatureVerifyFailures: Counter;
+  private readonly withdrawalLimitBreaches: Counter;
+  private readonly refreshReuse: Counter;
 
   constructor(
     private readonly clock: ClockQualityService,
@@ -76,6 +79,21 @@ export class MetricsService implements OnModuleInit {
       help: 'Witness job detections (fork, truncation, or rollback)',
       registers: [this.register],
     });
+    this.signatureVerifyFailures = new Counter({
+      name: 'fintech_signature_verify_failures_total',
+      help: 'SignerService.verify results that returned false',
+      registers: [this.register],
+    });
+    this.withdrawalLimitBreaches = new Counter({
+      name: 'fintech_withdrawal_limit_breaches_total',
+      help: 'Transfer or withdrawal rejections for a daily limit',
+      registers: [this.register],
+    });
+    this.refreshReuse = new Counter({
+      name: 'fintech_refresh_reuse_total',
+      help: 'Refresh tokens presented again after they were used',
+      registers: [this.register],
+    });
   }
 
   onModuleInit(): void {
@@ -97,6 +115,18 @@ export class MetricsService implements OnModuleInit {
 
   recordWitnessAlert(): void {
     this.witnessAlerts.inc();
+  }
+
+  recordSignatureVerifyFailure(): void {
+    this.signatureVerifyFailures.inc();
+  }
+
+  recordWithdrawalLimitBreach(): void {
+    this.withdrawalLimitBreaches.inc();
+  }
+
+  recordRefreshReuse(): void {
+    this.refreshReuse.inc();
   }
 
   async scrape(): Promise<string> {

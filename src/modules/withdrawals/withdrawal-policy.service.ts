@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { MetricsService } from '../../common/metrics/metrics.service.js';
 import { CURRENCIES, type Currency } from '../../common/money/currency.js';
 import { Money } from '../../common/money/money.js';
 import type { EnvironmentVariables } from '../../config/env.validation.js';
@@ -22,7 +23,10 @@ export interface EvaluateWithdrawalInput {
 export class WithdrawalPolicyService {
   private readonly byCurrency: Record<Currency, WithdrawalPolicyLimits>;
 
-  constructor(config: ConfigService<EnvironmentVariables, true>) {
+  constructor(
+    config: ConfigService<EnvironmentVariables, true>,
+    @Optional() private readonly metrics?: MetricsService,
+  ) {
     const largeDelayHours = config.get('WITHDRAWAL_LARGE_DELAY_HOURS', {
       infer: true,
     });
@@ -53,7 +57,7 @@ export class WithdrawalPolicyService {
   }
 
   evaluate(input: EvaluateWithdrawalInput): WithdrawalPolicyDecision {
-    return evaluateWithdrawalPolicy(
+    const decision = evaluateWithdrawalPolicy(
       {
         amount: Money.of(input.amount, input.currency),
         currency: input.currency,
@@ -66,6 +70,9 @@ export class WithdrawalPolicyService {
       },
       this.byCurrency[input.currency],
     );
+    if (decision.action === 'reject' && decision.reason === 'OVER_DAILY_LIMIT')
+      this.metrics?.recordWithdrawalLimitBreach();
+    return decision;
   }
 
   limits(currency: Currency): WithdrawalPolicyLimits {
